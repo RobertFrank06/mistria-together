@@ -1,0 +1,14 @@
+name = "Mistria Together"
+author = "RobertFrank06"
+version = "0.1.0"
+minInstallerVersion = "0.17.0"
+manifestVersion = 1
+download_url = "https://github.com/RobertFrank06/mistria-together"
+update_url = "https://github.com/RobertFrank06/mistria-together"
+requires_hooks = [
+    "clock.time_advance",
+    "game.new_day",
+    "game.save_guard",
+    "game.title_entered",
+    "ui.draw_gui",
+]
