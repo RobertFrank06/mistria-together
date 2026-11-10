@@ -247,3 +247,64 @@ async fn guest_survives_host_leaving_and_wrong_password() {
     g.send(-2, false, json!({ "t": "again" }));
     until(&mut [&mut h, &mut g], "traffic after reconnect", |gs| gs[0].inbox.iter().any(|(_, d)| d["t"] == "again")).await;
 }
+
+async fn menu(dir: &PathBuf) -> Companion {
+    Companion::start(Options { mode: Mode::Menu, password: None, ipc_dirs: vec![dir.clone()] }).await.unwrap()
+}
+
+fn link(dir: &PathBuf) -> Value {
+    std::fs::read(dir.join("link.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(Value::Null)
+}
+
+/// The background companion does nothing until the game's menu asks, finds
+/// hosts on the local network, and can be switched off again.
+#[tokio::test(flavor = "multi_thread")]
+async fn driven_from_the_game_menu() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (hd, gd) = (tmp.path().join("h"), tmp.path().join("g"));
+    let mut h = FakeGame::new(hd.clone(), "MenuHost");
+    let mut g = FakeGame::new(gd.clone(), "Guest");
+    let _hc = menu(&hd).await;
+    let _gc = menu(&gd).await;
+
+    until(&mut [&mut h, &mut g], "companions idle", |gs| link(&gs[0].dir)["mode"] == "off" && link(&gs[1].dir)["mode"] == "off").await;
+    assert!(h.take("welcome").is_none());
+
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    h.write("control.json", &json!({ "seq": 1, "mode": "host", "port": port }).to_string());
+    until(&mut [&mut h, &mut g], "host online", |gs| gs[0].inbox.iter().any(|(_, d)| d["t"] == "welcome")).await;
+
+    // The guest's companion hears the host's beacon.
+    let mut addr = format!("127.0.0.1:{port}");
+    let deadline = Instant::now() + Duration::from_secs(6);
+    let mut found = false;
+    while Instant::now() < deadline && !found {
+        h.pump();
+        g.pump();
+        if let Some(game) = link(&gd)["lan"].as_array().and_then(|l| l.iter().find(|e| e["name"] == "MenuHost")) {
+            assert_eq!(game["players"], 1);
+            addr = game["addr"].as_str().unwrap().to_string();
+            found = true;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    if cfg!(target_os = "linux") {
+        assert!(found, "host was not discovered on the local network");
+    }
+
+    g.write("control.json", &json!({ "seq": 1, "mode": "join", "addr": addr }).to_string());
+    until(&mut [&mut h, &mut g], "guest online", |gs| {
+        gs[1].inbox.iter().any(|(_, d)| d["t"] == "welcome") && link(&gs[1].dir)["mode"] == "join"
+    })
+    .await;
+    g.send(-2, false, json!({ "t": "hello-host" }));
+    until(&mut [&mut h, &mut g], "message reaches host", |gs| gs[0].inbox.iter().any(|(_, d)| d["t"] == "hello-host")).await;
+
+    // Disconnect from the menu.
+    g.inbox.clear();
+    g.write("control.json", &json!({ "seq": 2, "mode": "off" }).to_string());
+    until(&mut [&mut h, &mut g], "guest disconnected", |gs| {
+        gs[1].inbox.iter().any(|(_, d)| d["t"] == "bye") && gs[0].inbox.iter().any(|(_, d)| d["t"] == "leave") && link(&gs[1].dir)["mode"] == "off"
+    })
+    .await;
+}

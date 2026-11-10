@@ -32,7 +32,7 @@ function mt_dev_state() {
 
 function mt_dev_on_title(_ctx) {
     var _dev = mt_dev_state();
-    if (!_dev.enabled || _dev.started) { return; }
+    if (!_dev.enabled || _dev.started || _dev.mode == "title") { return; }
     _dev.started = true;
     new_chain()
         .join(LinkId.Timer, 30)
@@ -109,6 +109,20 @@ function mt_dev_run(_cmd) {
             break;
         case "weather":
             WEATHER.set_weather(_cmd.w);
+            break;
+        case "menu":
+            // Drive the Multiplayer menu: open | host | join <addr> | joinlan | off
+            if (_cmd.action == "open") { mt_menu_open(); }
+            else if (_cmd.action == "pick") { mt_menu_on_join(0); }
+            else if (_cmd.action == "type") { mt_menu_on_join(99); }
+            else if (_cmd.action == "host") { mt_menu_on_host(); }
+            else if (_cmd.action == "join") { mt_menu_join_address(_cmd.addr); }
+            else if (_cmd.action == "off") { mt_menu_on_disconnect(); }
+            else if (_cmd.action == "joinlan") {
+                var _dl = mt_menu_link();
+                if (_dl == undefined || !is_array(_dl[$ "lan"]) || array_length(_dl.lan) == 0) { throw "no game found on the network"; }
+                mt_menu_join_address(string(_dl.lan[0].addr));
+            }
             break;
         case "trace":
             // Dump and clear the motion trace.

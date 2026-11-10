@@ -9,11 +9,11 @@
 // and the companion does all of the networking.
 
 #macro MT_MOD "mistria_together"
-#macro MT_VERSION "0.1.0"
+#macro MT_VERSION "0.2.0"
 // Bumped whenever game-to-game messages change shape. Peers with a different
 // value are refused by the companion before they ever reach the game.
 #macro MT_PROTO 1
-#macro MT_CONFIG_VERSION 1
+#macro MT_CONFIG_VERSION 2
 
 #macro MT_TO_ALL -1
 #macro MT_TO_HOST -2
@@ -59,6 +59,12 @@ function __mt_rt() {
             // --- world (MtWorld.gml) ---
             world: undefined,
 
+            // --- menu (MtMenu.gml) ---
+            control_seq: 0,
+            menu_mode: "off",
+            title_boot: true,
+            title_button: undefined,
+
             // --- ui (MtUi.gml) ---
             hud_visible: true,
             toasts: [],
@@ -80,15 +86,21 @@ function mt_config() {
     var _rt = __mt_rt();
     if (_rt.cfg != undefined) { return _rt.cfg; }
     var _src = mmapi_config_read_valid(MT_MOD, MT_CONFIG_VERSION);
-    var _key = _src[$ "hud_key"];
+    var _key = _src[$ "menu_key"];
     if (!is_string(_key) || mmapi_hotkey_binding_from_name(_key) == undefined) { _key = "F9"; }
+    var _password = _src[$ "password"];
+    var _last = _src[$ "last_address"];
     _rt.cfg = {
         // Show the player list / connection status in the top-left corner.
         show_hud: mmapi_config_bool(_src, "show_hud", true),
         // Draw each player's name above their head.
         name_tags: mmapi_config_bool(_src, "name_tags", true),
-        // Key that toggles the HUD.
-        hud_key: _key,
+        // Key that opens the Multiplayer menu.
+        menu_key: _key,
+        // Optional session password; everyone must use the same one.
+        password: is_string(_password) ? _password : "",
+        // The address typed into the Join box last time.
+        last_address: is_string(_last) ? _last : "",
         // How far behind real time other players are drawn, in frames. Higher
         // is smoother on bad connections, lower is more immediate.
         smoothing_frames: mmapi_config_number(_src, "smoothing_frames", 7, 2, 30),
@@ -126,7 +138,8 @@ function mt_tick() {
     if (!_rt.ready) {
         _rt.ready = true;
         mt_config();
-        mt_ipc_init();
+        if (_rt.dir == undefined) { mt_ipc_init(); }
+        mt_menu_free_title_button();
         mt_ui_init();
         mt_log("Mistria Together " + MT_VERSION + " ready, ipc dir " + string(_rt.dir));
     }
@@ -156,9 +169,11 @@ function mt_on_title_entered(_ctx) {
     var _rt = __mt_rt();
     if (_rt.ready) {
         _rt.in_world = false;
+        _rt.ready = false;
         mt_net_reset("left the game");
         mt_ipc_write_game(true);
     }
+    mt_menu_on_title(_ctx);
     mt_dev_on_title(_ctx);
 }
 

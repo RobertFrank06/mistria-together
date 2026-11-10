@@ -57,7 +57,7 @@ function mt_ipc_write_game(_force) {
     _rt.game_written_frame = _rt.frame;
     var _name = "";
     var _farm = "";
-    if (_rt.in_world) {
+    if (_rt.in_world && instance_exists(obj_ari)) {
         _name = string(ARI.name);
         _farm = string(ARI.farm_name);
     }

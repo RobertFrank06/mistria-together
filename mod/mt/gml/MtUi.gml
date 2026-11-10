@@ -4,13 +4,16 @@
 function mt_ui_init() {
     var _rt = __mt_rt();
     _rt.hud_visible = mt_config().show_hud;
-    var _binding = mmapi_hotkey_binding_from_name(mt_config().hud_key);
-    if (_binding != undefined) { mmapi_hotkey_register_binding(_binding, mt_ui_toggle_hud); }
+    if (_rt[$ "hotkey_registered"] == true) { return; }
+    _rt.hotkey_registered = true;
+    var _binding = mmapi_hotkey_binding_from_name(mt_config().menu_key);
+    if (_binding != undefined) { mmapi_hotkey_register_binding(_binding, mt_ui_on_menu_key); }
 }
 
-function mt_ui_toggle_hud() {
-    var _rt = __mt_rt();
-    _rt.hud_visible = !_rt.hud_visible;
+function mt_ui_on_menu_key() {
+    // Not on top of another menu, cutscene or popup.
+    if (!mt_in_world() || game_paused()) { return; }
+    mt_menu_open();
 }
 
 // A toast in the game's own notification stack.
@@ -43,15 +46,15 @@ function mt_ui_draw_name_tag(_name, _x, _y) {
 
 function mt_ui_status_line() {
     var _rt = __mt_rt();
-    if (!_rt.link_alive) { return "Together: companion not running"; }
+    var _key = mt_config().menu_key;
     if (_rt.online) {
-        return mt_is_host() ? "Together: hosting" : "Together: connected";
+        return mt_is_host() ? "Hosting" : "Playing together";
     }
     switch (_rt.link_state) {
-        case "connecting": return "Together: connecting...";
-        case "error":      return "Together: " + _rt.link_detail;
-        case "hosting":    return "Together: starting host...";
-        default:           return "Together: " + (_rt.link_detail != "" ? _rt.link_detail : "idle");
+        case "connecting": return "Connecting...";
+        case "error":      return _rt.link_detail;
+        case "hosting":    return "Starting to host...";
+        default:           return "Multiplayer: " + _key;
     }
 }
 
@@ -60,6 +63,8 @@ function mt_ui_draw_gui(_scale) {
     var _rt = __mt_rt();
     if (!_rt.ready || !_rt.hud_visible || !_rt.in_world) { return; }
     if (!_rt.link_alive && !_rt.online) { return; }   // stay out of the way in single player
+    // The reminder of the menu key fades out of the way after a while.
+    if (!_rt.online && _rt.link_state == "idle" && _rt.frame > 60 * 20) { return; }
     try {
         var _s = is_numeric(_scale) ? _scale : 1;
         var _lines = [mt_ui_status_line()];

@@ -47,12 +47,48 @@ pub enum OutMsg {
     Link(serde_json::Value),
 }
 
+/// What the player asked for in the in-game menu (`control.json`).
+#[derive(Debug, Clone, PartialEq, Default, Deserialize)]
+pub struct Control {
+    #[serde(default)]
+    pub seq: f64,
+    /// "off", "host" or "join".
+    #[serde(default)]
+    pub mode: String,
+    #[serde(default)]
+    pub addr: String,
+    #[serde(default)]
+    pub port: f64,
+    #[serde(default)]
+    pub password: String,
+}
+
 #[derive(Debug)]
 pub enum ToNet {
     /// The paired game changed (started, loaded a save, went away).
     Game(Option<GameInfo>),
     Out(OutMsg),
+    Control(Control),
 }
+
+/// A session found on the local network.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct LanGame {
+    pub name: String,
+    pub addr: String,
+    pub players: u32,
+    pub locked: bool,
+}
+
+/// State the network side publishes for the game's menu (via `link.json`).
+#[derive(Debug, Default)]
+pub struct Published {
+    pub mode: String,
+    pub addr: String,
+    pub lan: Vec<LanGame>,
+}
+
+pub type SharedPublished = Arc<std::sync::Mutex<Published>>;
 
 #[derive(Debug)]
 pub enum ToGame {
@@ -96,6 +132,9 @@ const SCAN_INTERVAL: Duration = Duration::from_millis(100);
 const LINK_INTERVAL: Duration = Duration::from_millis(250);
 const FLUSH_INTERVAL: Duration = Duration::from_millis(8);
 const LOOP_SLEEP: Duration = Duration::from_millis(3);
+const IDLE_SLEEP: Duration = Duration::from_millis(100);
+/// How long after the last sign of a game we keep publishing our status.
+const ACTIVE_WINDOW: Duration = Duration::from_secs(900);
 /// Unread batches the game may have before we start holding messages back.
 const MAX_BACKLOG: u64 = 40;
 
@@ -126,6 +165,14 @@ pub struct Bridge {
     to_net: UnboundedSender<ToNet>,
     from_net: Receiver<ToGame>,
     stop: Arc<AtomicBool>,
+    published: SharedPublished,
+    /// Raw text of the last control file seen, per candidate.
+    control_seen: Vec<Option<String>>,
+    /// Obey a control file that already exists at startup (background mode).
+    adopt_control: bool,
+    /// When a game last showed any sign of life in a candidate directory.
+    active_until: Option<Instant>,
+    link_written: bool,
 }
 
 fn write_atomic(dir: &Path, name: &str, bytes: &[u8]) -> std::io::Result<()> {
@@ -175,7 +222,10 @@ impl Bridge {
         to_net: UnboundedSender<ToNet>,
         from_net: Receiver<ToGame>,
         stop: Arc<AtomicBool>,
+        published: SharedPublished,
+        adopt_control: bool,
     ) -> Bridge {
+        let count = ipc_dirs.len();
         Bridge {
             candidates: ipc_dirs
                 .into_iter()
@@ -190,6 +240,11 @@ impl Bridge {
             to_net,
             from_net,
             stop,
+            published,
+            control_seen: vec![None; count],
+            adopt_control,
+            active_until: None,
+            link_written: false,
         }
     }
 
@@ -197,12 +252,15 @@ impl Bridge {
         let mut last_scan = Instant::now() - SCAN_INTERVAL;
         let mut last_link = Instant::now() - LINK_INTERVAL;
         let mut last_flush = Instant::now();
+        let mut first = true;
         self.clean_all();
         while !self.stop.load(Ordering::Relaxed) {
             let now = Instant::now();
             if now.duration_since(last_scan) >= SCAN_INTERVAL {
                 last_scan = now;
                 self.scan();
+                self.read_control(first);
+                first = false;
             }
             self.read_outbound();
             if !self.drain_from_net() {
@@ -212,15 +270,48 @@ impl Bridge {
                 last_flush = now;
                 self.flush_inbound();
             }
-            if now.duration_since(last_link) >= LINK_INTERVAL {
-                last_link = now;
-                self.write_link();
+            // Only talk to the disk while a game is around: this program may
+            // sit in the background for days without one.
+            let active = self.paired.is_some() || self.active_until.map(|t| now < t).unwrap_or(false);
+            if active {
+                if now.duration_since(last_link) >= LINK_INTERVAL {
+                    last_link = now;
+                    self.write_link();
+                }
+            } else if self.link_written {
+                self.remove_link();
             }
-            std::thread::sleep(LOOP_SLEEP);
+            std::thread::sleep(if self.paired.is_some() { LOOP_SLEEP } else { IDLE_SLEEP });
         }
         // Tell the game we are gone instead of letting the heartbeat time out.
+        self.remove_link();
+    }
+
+    fn remove_link(&mut self) {
         for c in &self.candidates {
             let _ = fs::remove_file(c.dir.join("link.json"));
+        }
+        self.link_written = false;
+    }
+
+    /// The in-game menu writes `control.json`; it works on the title screen
+    /// too, where the game sends no heartbeat.
+    fn read_control(&mut self, first: bool) {
+        for (i, c) in self.candidates.iter().enumerate() {
+            let path = c.dir.join("control.json");
+            let Some(bytes) = read_with_retry(&path) else { continue };
+            let text = String::from_utf8_lossy(&bytes).into_owned();
+            if self.control_seen[i].as_deref() == Some(text.as_str()) {
+                continue;
+            }
+            self.control_seen[i] = Some(text.clone());
+            self.active_until = Some(Instant::now() + ACTIVE_WINDOW);
+            if first && !self.adopt_control {
+                continue;
+            }
+            if let Ok(control) = serde_json::from_str::<Control>(&text) {
+                let _ = self.to_net.send(ToNet::Control(control));
+            }
         }
     }
 
@@ -258,6 +349,7 @@ impl Bridge {
                 // heartbeat has to move while we watch.
                 if c.seen {
                     c.last_change = Some(now);
+                    self.active_until = Some(now + ACTIVE_WINDOW);
                 }
                 c.last_hb = g.hb;
                 c.last_sid = g.sid.clone();
@@ -405,13 +497,20 @@ impl Bridge {
 
     fn write_link(&mut self) {
         self.hb += 1;
-        let body = serde_json::json!({
-            "epoch": self.epoch,
-            "hb": self.hb,
-            "state": self.state,
-            "detail": self.detail,
-        })
-        .to_string();
+        let body = {
+            let p = self.published.lock().unwrap();
+            serde_json::json!({
+                "epoch": self.epoch,
+                "hb": self.hb,
+                "state": self.state,
+                "detail": self.detail,
+                "mode": p.mode,
+                "addr": p.addr,
+                "lan": p.lan,
+            })
+            .to_string()
+        };
+        self.link_written = true;
         for c in &self.candidates {
             // Only where the mod has been (or the game data dir exists): never
             // create save directories for a game that is not installed here.

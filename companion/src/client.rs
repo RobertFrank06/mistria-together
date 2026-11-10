@@ -2,7 +2,8 @@
 //! for as long as the paired game has a save loaded.
 
 use crate::blob::{self, Assembler};
-use crate::bridge::{GameInfo, OutMsg, ToGame, ToNet};
+use crate::bridge::{Control, GameInfo, OutMsg, SharedPublished, ToGame, ToNet};
+use crate::hub::{Hub, HubConfig};
 use crate::log;
 use crate::proto::*;
 use anyhow::{anyhow, Result};
@@ -22,9 +23,34 @@ pub struct NetConfig {
     pub host_key: Option<String>,
 }
 
+/// What the player wants the companion to be doing.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Desired {
+    Off,
+    /// Host from this machine, or through a relay when `relay` is set.
+    Host { port: u16, relay: Option<String> },
+    Join { addr: String },
+}
+
+/// An embedded hub this companion is hosting on.
+pub struct LocalHub {
+    pub hub: Hub,
+    pub key: String,
+}
+
+pub struct NetOptions {
+    pub initial: Desired,
+    pub password: Option<String>,
+    /// A hub started ahead of time (so its port is known to the caller).
+    pub hub: Option<LocalHub>,
+    pub published: SharedPublished,
+}
+
 enum Ended {
     /// The game changed under us (quit, new save, went back to the title).
     Game(Option<GameInfo>),
+    /// The player picked something else in the menu.
+    Control(Control),
     /// The connection ended; tell the player why and retry.
     Lost(String),
     /// The bridge is gone: shut down.
@@ -46,45 +72,139 @@ fn is_ready(game: &Option<GameInfo>) -> bool {
     game.as_ref().map(|g| g.ready).unwrap_or(false)
 }
 
+fn desired_from(control: &Control) -> Desired {
+    let port = if control.port >= 1.0 && control.port <= 65535.0 { control.port as u16 } else { DEFAULT_PORT };
+    match control.mode.as_str() {
+        "host" => Desired::Host { port, relay: None },
+        "join" if !control.addr.trim().is_empty() => Desired::Join { addr: control.addr.trim().to_string() },
+        _ => Desired::Off,
+    }
+}
+
+struct State {
+    desired: Desired,
+    password: Option<String>,
+    game: Option<GameInfo>,
+}
+
+impl State {
+    fn apply_control(&mut self, control: &Control) {
+        self.desired = desired_from(control);
+        self.password = Some(control.password.clone()).filter(|p| !p.is_empty());
+    }
+
+    /// Returns false when the bridge is gone.
+    fn apply(&mut self, msg: Option<ToNet>) -> bool {
+        match msg {
+            Some(ToNet::Game(g)) => self.game = g,
+            Some(ToNet::Control(c)) => self.apply_control(&c),
+            Some(ToNet::Out(_)) => {}
+            None => return false,
+        }
+        true
+    }
+}
+
 /// Runs until the bridge goes away.
-pub async fn run(cfg: NetConfig, mut from_bridge: UnboundedReceiver<ToNet>, to_game: Sender<ToGame>) {
-    let mut game: Option<GameInfo> = None;
-    let waiting = |game: &Option<GameInfo>| match game {
-        None => "waiting for the game (start Fields of Mistria)",
-        Some(_) => "waiting for you to load a save",
-    };
+pub async fn run(opts: NetOptions, mut from_bridge: UnboundedReceiver<ToNet>, to_game: Sender<ToGame>) {
+    let mut st = State { desired: opts.initial, password: opts.password, game: None };
+    let mut hub: Option<LocalHub> = opts.hub;
+    let mut hub_password = st.password.clone();
+    let published = opts.published;
+    let beacon_id = crate::bridge::new_epoch();
     loop {
-        while !is_ready(&game) {
-            status(&to_game, "idle", waiting(&game));
-            match from_bridge.recv().await {
-                Some(ToNet::Game(g)) => game = g,
-                Some(ToNet::Out(_)) => {}
-                None => return,
+        {
+            let mut p = published.lock().unwrap();
+            (p.mode, p.addr) = match &st.desired {
+                Desired::Off => ("off".to_string(), String::new()),
+                Desired::Host { relay, .. } => ("host".to_string(), relay.clone().unwrap_or_default()),
+                Desired::Join { addr } => ("join".to_string(), addr.clone()),
+            };
+        }
+
+        // Keep the embedded hub in step with what is wanted.
+        let want_port = match &st.desired {
+            Desired::Host { port, relay: None } => Some(*port),
+            _ => None,
+        };
+        match want_port {
+            None => hub = None,
+            Some(port) => {
+                let stale = hub.as_ref().map(|h| (port != 0 && h.hub.tcp_addr.port() != port) || hub_password != st.password).unwrap_or(false);
+                if stale {
+                    hub = None;
+                }
+                if hub.is_none() {
+                    let key = format!("{}{}", crate::bridge::new_epoch(), crate::bridge::new_epoch());
+                    let cfg = HubConfig { password: st.password.clone(), host_key: Some(key.clone()) };
+                    match Hub::start(SocketAddr::from(([0, 0, 0, 0], port)), cfg).await {
+                        Ok(started) => {
+                            log!("hosting on port {}", started.tcp_addr.port());
+                            hub_password = st.password.clone();
+                            hub = Some(LocalHub { hub: started, key });
+                        }
+                        Err(e) => {
+                            status(&to_game, "error", format!("cannot host: {e}"));
+                            if !st.apply(from_bridge.recv().await) {
+                                return;
+                            }
+                            continue;
+                        }
+                    }
+                }
             }
         }
-        let info = game.clone().expect("ready game");
+
+        if st.desired == Desired::Off || !is_ready(&st.game) {
+            let detail = match (&st.desired, &st.game) {
+                (Desired::Off, _) => "not connected",
+                (_, None) => "waiting for the game",
+                (_, Some(_)) => "waiting for you to load a save",
+            };
+            status(&to_game, "idle", detail);
+            if !st.apply(from_bridge.recv().await) {
+                return;
+            }
+            continue;
+        }
+
+        let info = st.game.clone().expect("ready game");
+        let (cfg, announce) = match &st.desired {
+            Desired::Host { relay: None, .. } => {
+                let h = hub.as_ref().expect("hub running");
+                let port = h.hub.tcp_addr.port();
+                (
+                    NetConfig { hub_addr: format!("127.0.0.1:{port}"), role: Role::Host, password: st.password.clone(), host_key: Some(h.key.clone()) },
+                    Some((beacon_id.clone(), port)),
+                )
+            }
+            Desired::Host { relay: Some(addr), .. } => {
+                (NetConfig { hub_addr: addr.clone(), role: Role::Host, password: st.password.clone(), host_key: None }, None)
+            }
+            Desired::Join { addr } => (NetConfig { hub_addr: addr.clone(), role: Role::Guest, password: st.password.clone(), host_key: None }, None),
+            Desired::Off => unreachable!(),
+        };
         status(&to_game, "connecting", format!("connecting to {}", cfg.hub_addr));
-        match session(&cfg, &info, &mut from_bridge, &to_game).await {
+        match session(&cfg, &info, announce, &mut from_bridge, &to_game).await {
             Ended::Stop => return,
-            Ended::Game(g) => {
-                game = g;
+            Ended::Game(g) => st.game = g,
+            Ended::Control(c) => {
+                system(&to_game, json!({ "t": "bye", "reason": "disconnected" }));
+                st.apply_control(&c);
             }
             Ended::Lost(reason) => {
                 log!("disconnected: {reason}");
                 system(&to_game, json!({ "t": "bye", "reason": reason }));
                 status(&to_game, "error", format!("{reason} - retrying"));
                 let retry_at = tokio::time::Instant::now() + RETRY_DELAY;
+                let before = (st.desired.clone(), st.game.as_ref().map(|g| g.sid.clone()));
                 loop {
                     tokio::select! {
                         _ = tokio::time::sleep_until(retry_at) => break,
-                        msg = from_bridge.recv() => match msg {
-                            Some(ToNet::Game(g)) => {
-                                let changed = g.as_ref().map(|g| &g.sid) != game.as_ref().map(|g| &g.sid);
-                                game = g;
-                                if changed || !is_ready(&game) { break; }
-                            }
-                            Some(ToNet::Out(_)) => {}
-                            None => return,
+                        msg = from_bridge.recv() => {
+                            if !st.apply(msg) { return; }
+                            let now = (st.desired.clone(), st.game.as_ref().map(|g| g.sid.clone()));
+                            if now != before || !is_ready(&st.game) { break; }
                         }
                     }
                 }
@@ -134,9 +254,15 @@ async fn connect(cfg: &NetConfig, info: &GameInfo) -> Result<(TcpStream, Welcome
 async fn session(
     cfg: &NetConfig,
     info: &GameInfo,
+    announce: Option<(String, u16)>,
     from_bridge: &mut UnboundedReceiver<ToNet>,
     to_game: &Sender<ToGame>,
 ) -> Ended {
+    let current = match cfg.role {
+        Role::Host if cfg.host_key.is_some() => "host",
+        Role::Host => "host-relay",
+        Role::Guest => "join",
+    };
     let (stream, welcome, hub_addr) = match connect(cfg, info).await {
         Ok(v) => v,
         Err(e) => return Ended::Lost(e.to_string()),
@@ -151,6 +277,11 @@ async fn session(
     let connected_state = if cfg.role == Role::Host { "hosting" } else { "connected" };
     status(to_game, connected_state, format!("{} player(s) online", welcome.peers.len() + 1));
     let mut peer_count = welcome.peers.len() + 1;
+    let players = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(peer_count as u32));
+    let beacon = announce.map(|(id, port)| {
+        let name = if info.name.is_empty() { "Player".to_string() } else { info.name.clone() };
+        crate::lan::announce(id, name, port, cfg.password.is_some(), players.clone())
+    });
 
     // All TCP writes go through one task so big file transfers interleave
     // with ordinary messages instead of blocking them.
@@ -263,6 +394,16 @@ async fn session(
                         let same = g.as_ref().map(|g| g.sid == info.sid && g.ready && g.dir == info.dir).unwrap_or(false);
                         if !same { break Ended::Game(g); }
                     }
+                    Some(ToNet::Control(c)) => {
+                        // Re-selecting what is already running changes nothing.
+                        let wanted = desired_from(&c);
+                        let same = match (&wanted, current) {
+                            (Desired::Host { relay: None, .. }, "host") => true,
+                            (Desired::Join { addr }, "join") => *addr == cfg.hub_addr,
+                            _ => false,
+                        } && Some(c.password.clone()).filter(|p| !p.is_empty()) == cfg.password;
+                        if !same { break Ended::Control(c); }
+                    }
                     Some(ToNet::Out(OutMsg::Peer { to, unreliable, json })) => {
                         let udp_ok = udp_acked.map(|t| t.elapsed() < UDP_OK_WINDOW).unwrap_or(false);
                         if unreliable && udp_ok && json.len() <= MAX_DATAGRAM_PAYLOAD {
@@ -294,6 +435,7 @@ async fn session(
             }
             _ = tick.tick() => {
                 ticks += 1;
+                players.store(peer_count as u32, std::sync::atomic::Ordering::Relaxed);
                 if last_frame.elapsed() > Duration::from_secs(15) {
                     break Ended::Lost("the host stopped responding".into());
                 }
@@ -310,11 +452,10 @@ async fn session(
         }
     };
     drop(tx);
+    if let Some(beacon) = beacon {
+        beacon.abort();
+    }
     writer.abort();
     assembler.cleanup();
-    match &ended {
-        Ended::Game(_) | Ended::Stop => {}
-        Ended::Lost(_) => {}
-    }
     ended
 }

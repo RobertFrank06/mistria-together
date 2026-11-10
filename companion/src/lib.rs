@@ -8,6 +8,8 @@ pub mod blob;
 pub mod bridge;
 pub mod client;
 pub mod hub;
+pub mod install;
+pub mod lan;
 pub mod paths;
 pub mod proto;
 
@@ -17,10 +19,26 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+static LOG_FILE: std::sync::Mutex<Option<std::fs::File>> = std::sync::Mutex::new(None);
+
+/// Also write log lines to a file (the background companion has no window).
+pub fn log_to_file(path: Option<PathBuf>) {
+    let Some(path) = path else { return };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    *LOG_FILE.lock().unwrap() = std::fs::File::create(path).ok();
+}
+
 #[doc(hidden)]
 pub fn log_line(args: std::fmt::Arguments<'_>) {
+    use std::io::Write;
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    println!("[{:02}:{:02}:{:02}] {}", (secs / 3600) % 24, (secs / 60) % 60, secs % 60, args);
+    let line = format!("[{:02}:{:02}:{:02}] {}", (secs / 3600) % 24, (secs / 60) % 60, secs % 60, args);
+    println!("{line}");
+    if let Some(file) = LOG_FILE.lock().unwrap().as_mut() {
+        let _ = writeln!(file, "{line}");
+    }
 }
 
 #[macro_export]
@@ -30,6 +48,9 @@ macro_rules! log {
 
 #[derive(Debug, Clone)]
 pub enum Mode {
+    /// Do nothing until the player picks Host or Join in the game's menu.
+    /// This is how the companion runs in the background.
+    Menu,
     /// Host a session. With `relay` set the session lives on that remote hub
     /// instead of one started here.
     Host { port: u16, relay: Option<String> },
@@ -47,11 +68,11 @@ pub struct Options {
 
 /// A running companion. Dropping it shuts everything down.
 pub struct Companion {
-    /// Address of the embedded hub when hosting locally.
+    /// Address of the embedded hub when started in host mode.
     pub hub_addr: Option<SocketAddr>,
     stop: Arc<AtomicBool>,
-    hub: Option<hub::Hub>,
     net: tokio::task::JoinHandle<()>,
+    lan: tokio::task::JoinHandle<()>,
     bridge: Option<std::thread::JoinHandle<()>>,
 }
 
@@ -59,34 +80,39 @@ impl Companion {
     pub async fn start(opts: Options) -> Result<Companion> {
         let mut hub = None;
         let mut hub_addr = None;
-        let net_cfg = match &opts.mode {
+        let initial = match &opts.mode {
+            Mode::Menu => client::Desired::Off,
             Mode::Host { port, relay: None } => {
-                let host_key = format!("{}{}", bridge::new_epoch(), bridge::new_epoch());
+                // Started here rather than lazily so a busy port is reported at once.
+                let key = format!("{}{}", bridge::new_epoch(), bridge::new_epoch());
                 let started = hub::Hub::start(
                     SocketAddr::from(([0, 0, 0, 0], *port)),
-                    hub::HubConfig { password: opts.password.clone(), host_key: Some(host_key.clone()) },
+                    hub::HubConfig { password: opts.password.clone(), host_key: Some(key.clone()) },
                 )
                 .await?;
                 hub_addr = Some(started.tcp_addr);
-                let local = format!("127.0.0.1:{}", started.tcp_addr.port());
-                hub = Some(started);
-                client::NetConfig { hub_addr: local, role: proto::Role::Host, password: opts.password.clone(), host_key: Some(host_key) }
+                let actual = started.tcp_addr.port();
+                hub = Some(client::LocalHub { hub: started, key });
+                client::Desired::Host { port: actual, relay: None }
             }
-            Mode::Host { relay: Some(addr), .. } => {
-                client::NetConfig { hub_addr: addr.clone(), role: proto::Role::Host, password: opts.password.clone(), host_key: None }
-            }
-            Mode::Join { addr } => {
-                client::NetConfig { hub_addr: addr.clone(), role: proto::Role::Guest, password: opts.password.clone(), host_key: None }
-            }
+            Mode::Host { port, relay: Some(addr) } => client::Desired::Host { port: *port, relay: Some(addr.clone()) },
+            Mode::Join { addr } => client::Desired::Join { addr: addr.clone() },
         };
 
+        let published: bridge::SharedPublished = Default::default();
         let (to_net, from_bridge) = tokio::sync::mpsc::unbounded_channel();
         let (to_game, from_net) = std::sync::mpsc::channel();
         let stop = Arc::new(AtomicBool::new(false));
-        let bridge = bridge::Bridge::new(opts.ipc_dirs.clone(), to_net, from_net, stop.clone());
+        let adopt = matches!(opts.mode, Mode::Menu);
+        let bridge = bridge::Bridge::new(opts.ipc_dirs.clone(), to_net, from_net, stop.clone(), published.clone(), adopt);
         let bridge = std::thread::Builder::new().name("bridge".into()).spawn(move || bridge.run())?;
-        let net = tokio::spawn(client::run(net_cfg, from_bridge, to_game));
-        Ok(Companion { hub_addr, stop, hub, net, bridge: Some(bridge) })
+        let lan = tokio::spawn(lan::listen(published.clone(), bridge::new_epoch()));
+        let net = tokio::spawn(client::run(
+            client::NetOptions { initial, password: opts.password.clone(), hub, published },
+            from_bridge,
+            to_game,
+        ));
+        Ok(Companion { hub_addr, stop, net, lan, bridge: Some(bridge) })
     }
 
     pub fn stop(mut self) {
@@ -96,9 +122,7 @@ impl Companion {
     fn shutdown(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
         self.net.abort();
-        if let Some(hub) = self.hub.take() {
-            hub.stop();
-        }
+        self.lan.abort();
         if let Some(handle) = self.bridge.take() {
             let _ = handle.join();
         }

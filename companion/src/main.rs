@@ -7,7 +7,7 @@ use std::net::{SocketAddr, UdpSocket};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "mistria-together", version, about = "Companion for the Mistria Together co-op mod.\n\nRun it next to Fields of Mistria: one player hosts, the others join.\nStart it without arguments for a guided setup.")]
+#[command(name = "mistria-together", version, about = "Companion for the Mistria Together co-op mod.\n\nRun it without arguments once to set it up; after that, host and join from the game's Multiplayer menu (F9).")]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
@@ -42,6 +42,15 @@ enum Command {
         /// The host's (or relay's) address, e.g. 100.64.0.5 or example.net:7777.
         addr: String,
     },
+    /// Set everything up: run in the background from now on (no window,
+    /// starts when you log in) and hand the mod to MOMI. This is also what
+    /// happens when the program is started without arguments.
+    Install,
+    /// Undo `install`.
+    Uninstall,
+    /// Run in the background mode `install` sets up: wait for the game and
+    /// do what the player picks in its Multiplayer menu.
+    Daemon,
     /// Run a standalone relay server. It needs no game: host and guests all
     /// connect to it, so nobody at home has to forward a port.
     Relay {
@@ -50,65 +59,33 @@ enum Command {
     },
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Default)]
-struct Remembered {
-    #[serde(default)]
-    last: String,
-    #[serde(default)]
-    addr: String,
+fn pause_if_double_clicked() {
+    // Started without a terminal of its own (double-click on Windows): keep
+    // the window open long enough to read.
+    if cfg!(windows) && std::env::var_os("PROMPT").is_none() {
+        print!("\nPress Enter to close.");
+        let _ = std::io::stdout().flush();
+        let _ = std::io::stdin().read_line(&mut String::new());
+    }
 }
 
-fn prompt(text: &str) -> String {
-    print!("{text}");
-    let _ = std::io::stdout().flush();
-    let mut line = String::new();
-    let _ = std::io::stdin().read_line(&mut line);
-    line.trim().to_string()
-}
-
-/// No arguments (for example a double-click): ask what to do.
-fn interactive(cli: &Cli) -> Result<Mode> {
-    let file = paths::settings_file(cli.data_dir.as_deref());
-    let mut mem: Remembered =
-        file.as_ref().and_then(|f| std::fs::read(f).ok()).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
-    println!("Mistria Together {}", env!("CARGO_PKG_VERSION"));
-    println!();
-    println!("  1) Host - other players join your game");
-    println!("  2) Join - connect to someone else's game");
-    println!();
-    let default = if mem.last == "join" { "2" } else { "1" };
-    let mode = loop {
-        let choice = prompt(&format!("Choose 1 or 2 [{default}]: "));
-        let choice = if choice.is_empty() { default.to_string() } else { choice };
-        match choice.as_str() {
-            "1" | "h" | "host" => {
-                mem.last = "host".into();
-                break Mode::Host { port: DEFAULT_PORT, relay: None };
+fn run_setup(install: bool) -> ! {
+    let result = if install { mistria_together::install::install() } else { mistria_together::install::uninstall() };
+    let code = match result {
+        Ok(lines) => {
+            println!("Mistria Together {}\n", env!("CARGO_PKG_VERSION"));
+            for line in lines {
+                println!("  * {line}");
             }
-            "2" | "j" | "join" => {
-                let addr = loop {
-                    let hint = if mem.addr.is_empty() { String::new() } else { format!(" [{}]", mem.addr) };
-                    let addr = prompt(&format!("Host address{hint}: "));
-                    let addr = if addr.is_empty() { mem.addr.clone() } else { addr };
-                    if !addr.is_empty() {
-                        break addr;
-                    }
-                };
-                mem.last = "join".into();
-                mem.addr = addr.clone();
-                break Mode::Join { addr };
-            }
-            _ => {}
+            0
+        }
+        Err(e) => {
+            eprintln!("Setup failed: {e:#}");
+            1
         }
     };
-    if let Some(file) = file {
-        if let Some(parent) = file.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        let _ = std::fs::write(file, serde_json::to_vec_pretty(&mem)?);
-    }
-    println!();
-    Ok(mode)
+    pause_if_double_clicked();
+    std::process::exit(code)
 }
 
 /// The local address the OS would use to reach `probe` (no packet is sent).
@@ -158,8 +135,13 @@ async fn main() -> Result<()> {
     let mode = match &cli.command {
         Some(Command::Host { port, relay }) => Mode::Host { port: *port, relay: relay.clone() },
         Some(Command::Join { addr }) => Mode::Join { addr: addr.clone() },
+        Some(Command::Daemon) => {
+            mistria_together::log_to_file(mistria_together::install::log_file());
+            Mode::Menu
+        }
+        Some(Command::Uninstall) => run_setup(false),
+        Some(Command::Install) | None => run_setup(true),
         Some(Command::Relay { .. }) => unreachable!(),
-        None => interactive(&cli)?,
     };
 
     let ipc_dirs = paths::ipc_dirs(cli.data_dir.as_deref(), cli.instance.as_deref());
@@ -177,9 +159,6 @@ async fn main() -> Result<()> {
         Ok(c) => c,
         Err(e) => {
             eprintln!("error: {e}");
-            if cli.command.is_none() {
-                prompt("Press Enter to close.");
-            }
             std::process::exit(1);
         }
     };
@@ -187,8 +166,8 @@ async fn main() -> Result<()> {
         Mode::Host { relay: None, .. } => print_host_addresses(companion.hub_addr.map(|a| a.port()).unwrap_or(DEFAULT_PORT)),
         Mode::Host { relay: Some(addr), .. } => log!("hosting through the relay at {addr}"),
         Mode::Join { addr } => log!("joining {addr}"),
+        Mode::Menu => log!("waiting for the game; host or join from its Multiplayer menu (F9)"),
     }
-    log!("keep this window open while you play. Ctrl+C to quit.");
 
     tokio::signal::ctrl_c().await?;
     log!("shutting down");
