@@ -8,7 +8,7 @@ It has two parts:
 - **the companion** (`companion/`, Rust), a small program you run next to the game. The game's scripting runtime cannot open network connections, so the companion does all the networking and talks to the mod through files in the game's save folder.
 
 > Unofficial fan project, not affiliated with NPC Studio. Early software: back up your saves.
-> Developed and play-tested on Linux (native build). The Windows and macOS companions are built and unit-tested by CI but have not been play-tested yet.
+> Developed and play-tested on Linux (native build). CI builds and tests the Windows and macOS companions, but those builds have not yet been play-tested in game.
 
 ## What works
 
@@ -34,26 +34,26 @@ It has two parts:
 
 Everyone who plays needs both parts, in the same version.
 
-1. Install [MOMI](https://github.com/Garethp/Mods-of-Mistria-Installer/releases) 0.17.0 or newer.
-2. Download `MistriaTogether-mod.zip` from the [releases page](https://github.com/RobertFrank06/mistria-together/releases) and put it, still zipped, in your MOMI mods folder. Remove any other multiplayer mod.
-3. Run MOMI and install.
-4. Download the companion for your system from the same release (`mistria-together-windows-x86_64.zip`, `…-linux-x86_64.tar.gz`, `…-macos-arm64.tar.gz`) and unpack it anywhere.
+Everyone needs the same release of both the mod and companion.
+
+1. Install [MOMI](https://github.com/Garethp/Mods-of-Mistria-Installer/releases) 0.17.0 or newer and run it once so it creates its mods folder.
+2. Download the companion package for your system from the [releases page](https://github.com/RobertFrank06/mistria-together/releases): `MistriaTogether-windows.zip`, `MistriaTogether-linux.tar.gz`, or `MistriaTogether-macos.tar.gz`.
+3. Extract the package and run `mistria-together` (Windows: `mistria-together.exe`) once. It installs a background companion that starts when you log in, and copies `MistriaTogether-mod.zip` into a MOMI mods folder it can find. If it cannot find the folder, copy that zip there yourself.
+4. Open MOMI and install Mistria Together. Remove any other multiplayer mod first.
+
+To undo the companion setup, run `mistria-together uninstall` from a terminal. This removes its background startup and installed companion; remove the mod through MOMI separately.
 
 ## Play
 
-1. Everyone starts the companion (`mistria-together`, or double-click `mistria-together.exe`) and picks **Host** or **Join**. Guests type the host's address; it is remembered for next time.
-2. Everyone starts Fields of Mistria and loads a save. The order does not matter.
-3. The top-left corner of the screen shows the connection status and who is online. `F9` hides it.
+1. Start Fields of Mistria. The helper runs in the background after setup.
+2. Choose **Multiplayer** on the title screen, or press `F9` while playing. The title screen button is also available when starting a save directly.
+3. The host chooses **Host**. Friends on the same local network can find the session in the join flow. For internet play, use a VPN such as Tailscale or a relay, then enter the host/relay address; the address is remembered for next time.
+4. Guests choose **Join**, select a discovered local session or enter an address, then load a save. The order does not matter; joining begins when the guest loads into the world.
+5. The in-game status and player list appear in the top-left corner. Press `F9` to hide or show the HUD. Open Multiplayer again to see the session status or disconnect.
 
-The host's window prints the addresses guests can use:
+For internet play without a VPN or relay, the host must forward TCP and UDP port 7777 on their router and share their public address. The companion's terminal mode prints local and Tailscale addresses; the in-game menu mode runs quietly in the background.
 
-```text
-[10:16:54] hosting on port 7777 (TCP + UDP). Other players run:
-[10:16:54]     mistria-together join 100.76.202.16      (Tailscale)
-[10:16:54]     mistria-together join 192.168.178.24     (same network)
-```
-
-Guests should join with a character they do not mind sharing a world with: while connected, a guest's game holds the *host's* farm, and saving stores that. The mod copies the guest's save to `mod_data/mistria_together/backups/` in the game's data folder the first time it loads a host's world.
+Guests should join with a character they do not mind sharing a world with: while connected, a guest's game holds the *host's* farm, and saving stores that. The mod backs up the guest's original save under `mod_data/mistria_together/backups/` in the game's data folder before it first loads a host's world.
 
 ### Command line
 
@@ -62,9 +62,10 @@ mistria-together host [--port 7777] [--password PW]
 mistria-together join <address[:port]> [--password PW]
 mistria-together relay [--port 7777] [--password PW]
 mistria-together host --relay <address[:port]>
+mistria-together uninstall
 ```
 
-`relay` runs a standalone session server that needs no game. Put it on any machine both players can reach (a cheap VPS is plenty): the host runs `host --relay <server>`, guests run `join <server>`, and nobody has to forward a port at home.
+The default install is the in-game menu with an always-running companion. The `host` and `join` commands are optional ways to choose the session from a terminal instead. `relay` runs a standalone session server that needs no game. Put it on any machine both players can reach (a small VPS is enough): the host runs `host --relay <server>`, guests run `join <server>`, and nobody has to forward a port at home.
 
 Other options: `--data-dir <folder>` if the game's data folder is not found automatically, and `--instance <name>` together with the environment variable `MISTRIA_TOGETHER_INSTANCE=<name>` on the game, to run two games on one machine.
 
@@ -95,8 +96,9 @@ Other options: `--data-dir <folder>` if the game's data folder is not found auto
  game (GML mod)  <-- files -->  companion  <== TCP + UDP ==>  hub  <==>  other companions  <-- files -->  their game
 ```
 
-- **File bridge** (`mod/mt/gml/MtIpc.gml`, `companion/src/bridge.rs`). Both sides write numbered JSON batches into the save folder, each under a temporary name and then renamed into place, and read them strictly in order. No file is ever shared, rewritten or half-read, which is what makes the bridge reliable on Windows too.
+- **File bridge** (`mod/mt/gml/MtIpc.gml`, `companion/src/bridge.rs`). Both sides exchange numbered JSON batches in the game's data folder, first writing to a temporary file and then renaming it into place. The mod also sends menu choices through a control file; the companion reports session status and LAN discoveries back to the game. Sequence numbers let both sides read messages in order without sharing or partially reading a file.
 - **Hub** (`companion/src/hub.rs`). The host's companion runs a small session server in-process; `relay` runs the same server standalone. Reliable traffic goes over TCP. Movement goes over UDP with automatic TCP fallback per player.
+- **Local discovery** (`companion/src/lan.rs`). Hosts periodically broadcast a small UDP beacon on the local network. Other companions show those sessions in the in-game join menu. Beacons do not cross the internet or VPNs, so remote friends enter an address once.
 - **Players** (`MtPlayers.gml`). Poses carry the sender's frame number; the receiver interpolates on that timeline and bends its playback speed slightly to hold a constant delay.
 - **World** (`MtSync.gml`). Snapshots use the game's own save serializer and loader, shipped through the companion as a compressed file. Live changes are found by comparing the grid you stand in with a private copy, a slice per frame, densest around the player.
 
@@ -110,7 +112,7 @@ tools/package-mod.sh            # dist/MistriaTogether-mod.zip
 
 `tools/rig.sh` and `tools/e2e.sh` (Linux) set up an isolated copy of the game with its own save folder and run two real instances headless under gamescope against each other; `MISTRIA_TOGETHER_DEV` turns on the mod's test hooks (`mod/mt/gml/MtDev.gml`). The rig never touches your real install or saves.
 
-Pushing a tag `v*` builds the release archives for Linux, Windows and macOS.
+Pushing a tag such as `v0.2.0` runs tests and builds release packages for Linux, Windows and macOS. Each package contains the companion, the MOMI mod archive, license, and a short first-run guide.
 
 ## License
 
