@@ -1,0 +1,62 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  companion:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            name: linux-x86_64
+            bin: mistria-together
+          - os: windows-latest
+            name: windows-x86_64
+            bin: mistria-together.exe
+          - os: macos-latest
+            name: macos-arm64
+            bin: mistria-together
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked
+      - run: cargo build --release --locked
+      - name: Package
+        shell: bash
+        run: |
+          mkdir dist
+          cp "target/release/${{ matrix.bin }}" dist/
+          cp README.md LICENSE dist/
+          cd dist
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "../mistria-together-${{ matrix.name }}.zip" . > /dev/null
+          else
+            tar czf "../mistria-together-${{ matrix.name }}.tar.gz" .
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: companion-${{ matrix.name }}
+          path: mistria-together-${{ matrix.name }}.*
+
+  release:
+    needs: companion
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Package the mod
+        run: tools/package-mod.sh artifacts
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" artifacts/* --title "Mistria Together $GITHUB_REF_NAME" --generate-notes
