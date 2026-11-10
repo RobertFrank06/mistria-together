@@ -1,0 +1,45 @@
+# Contributor and Agent Notes
+
+## Project map
+
+- `mod/mt/gml/`: in-game mod scripts.
+- `companion/src/`: Rust companion and network/session code.
+- `companion/tests/`: real-socket companion integration tests.
+- `tools/rig.sh` and `tools/e2e.sh`: Linux game test rig. It must use its
+  isolated game and save directories; never install test changes into the
+  user's live game or modify real saves.
+- `README.md`: player-facing install and usage guide. `DESIGN.md`: architecture
+  and durable behavior boundaries.
+- Keep README claims limited to shipped behavior. `DESIGN.md` separates the
+  current implementation from the Stardew-like target; don't describe roadmap
+  behavior as already working.
+
+## Rules
+
+- Keep game networking in the Rust companion; GML communicates through the
+  file bridge.
+- Treat farm/world state as host-owned and player inventory, money, skills,
+  relationships, character identity, and story as personal. Verify save/load
+  ownership before expanding synchronization.
+- Never overwrite an existing guest-save backup on reconnect.
+- Keep the standalone mod ZIP as a convenience. MOMI needs the extracted
+  `mt/manifest.toml` folder.
+- Keep `companion/Cargo.toml`, `mod/mt/manifest.toml`, and `MT_VERSION` in
+  `mod/mt/gml/MtBoot.gml` on the same release version. Bump `MT_PROTO` only
+  when wire messages change.
+- Avoid new dependencies and generated files unless the task needs them.
+
+## Useful checks
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features --locked
+cargo build --release --locked
+tools/package-mod.sh /tmp/mistria-together-package-check
+```
+
+The game rig requires a local Linux game install and MOMI. Run
+`tools/rig.sh setup` before `tools/rig.sh install`; keep all rig data in its
+isolated runtime directory. Do not point MOMI or test scripts at the user's
+actual game folder.

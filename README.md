@@ -28,7 +28,7 @@ It has two parts:
 - Dungeon floors are generated per player and are not shared; you will not see each other in the mines.
 - Mounts and pets of other players are not drawn. NPCs and farm animals are simulated by each game on its own and can stand in different places for different players.
 - Buildings placed during a day reach the other players with the next morning's snapshot.
-- The day ends when the **host** sleeps. A guest who goes to bed alone is put back in step with the host.
+- **Stardew-style group sleep is not implemented yet.** Currently the host's day transition drives guests forward; guests cannot mark themselves ready for bed and hold the group until everyone is ready. See [DESIGN.md](DESIGN.md) for the intended co-op model.
 - Traffic is not encrypted. Use a VPN such as Tailscale (recommended anyway, it needs no port forwarding), or a session password on a network you trust.
 
 ## Install
@@ -92,6 +92,8 @@ Other options: `--data-dir <folder>` if the game's data folder is not found auto
 - Logs: the companion's window, and `mod_data/mistria_together/logs/mistria_together.log`.
 
 ## How it works
+
+See [DESIGN.md](DESIGN.md) for the architecture and save-ownership boundaries.
 
 ```text
  game (GML mod)  <-- files -->  companion  <== TCP + UDP ==>  hub  <==>  other companions  <-- files -->  their game
