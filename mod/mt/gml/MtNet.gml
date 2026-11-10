@@ -34,7 +34,7 @@ function mt_net_add_peer(_id, _name) {
         loc: undefined,         // location key the peer is in
         state: undefined,       // slow-changing visual state (held item, tool, ...)
         state_key: "",
-        inst: noone,            // obj_mt_player instance while in our room
+        inst: undefined,            // obj_mt_player instance while in our room
         buf: [],                // pose samples waiting to be played back
         last_s: -1,             // newest sample sequence seen
         last_pose_frame: 0,

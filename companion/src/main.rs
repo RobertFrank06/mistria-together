@@ -168,7 +168,7 @@ async fn main() -> Result<()> {
     }
     if let Some(dir) = &cli.data_dir {
         if !dir.is_dir() {
-            bail!("{} is not a directory", dir.display());
+            log!("note: {} does not exist yet - waiting for the game to create it", dir.display());
         }
     }
 

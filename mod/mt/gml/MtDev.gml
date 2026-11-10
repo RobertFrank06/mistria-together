@@ -24,6 +24,7 @@ function mt_dev_state() {
             cmd_seq: 0,
             move: undefined,
             log: [],
+            trace: [],
         };
     }
     return global.__mt_dev;
@@ -112,6 +113,11 @@ function mt_dev_run(_cmd) {
         case "save":
             save_game();
             break;
+        case "trace":
+            // Dump and clear the motion trace.
+            mt_ipc_write("dev_trace.json", json_stringify({ trace: _dev.trace }));
+            _dev.trace = [];
+            break;
         case "quit":
             game_end();
             break;
@@ -132,6 +138,16 @@ function mt_dev_tick() {
         obj_ari.y += _dev.move.dy;
         _dev.move.frames -= 1;
         if (_dev.move.frames <= 0) { _dev.move = undefined; }
+    }
+
+    // Per-frame trace of the first remote player, to measure how smoothly
+    // it moves on this side.
+    if (array_length(_rt.peer_ids) > 0) {
+        var _tp = _rt.peers[$ string(_rt.peer_ids[0])];
+        if (_tp != undefined && _tp.inst != undefined && instance_exists(_tp.inst)) {
+            array_push(_dev.trace, [_rt.frame, _tp.inst.x, _tp.inst.y, _tp.inst.mt_anim, array_length(_tp.buf)]);
+            while (array_length(_dev.trace) > 400) { array_delete(_dev.trace, 0, 1); }
+        }
     }
 
     if (_rt.frame % 6 == 0) {

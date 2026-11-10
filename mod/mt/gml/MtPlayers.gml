@@ -370,7 +370,7 @@ function mt_ghost_draw(_g, _draw_x, _draw_y) {
     _g.par.draw(_x + _g.par_offset.x, _y + _g.par_offset.y + _g.z, _g.depth);
     if (mt_config().name_tags) {
         var _peer = mt_peer(_g.mt_peer_id);
-        if (_peer != undefined) { mt_ui_draw_name_tag(_peer.name, _x, _y + _g.z - 34); }
+        if (_peer != undefined) { mt_ui_draw_name_tag(_peer.name, _x, _y + _g.z - 44); }
     }
 }
 

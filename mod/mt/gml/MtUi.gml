@@ -20,14 +20,25 @@ function mt_ui_toast(_text) {
     } catch (_e) {}
 }
 
+// The game's fonts are palette-indexed: text has to be drawn through a colour
+// lookup table or it comes out as raw red indices.
+function mt_ui_text_begin(_lut_index) {
+    draw_set_font(ANCHOR.get_text_font());
+    var _uvs = sprite_get_uvs(COMMON_LUT, 0);
+    shader_set_texture("u_LutTexture", COMMON_LUT, 0, "u_LutTexelSize");
+    gpu_set_draw_kind(DrawKind.AnchorText, _uvs[0], _uvs[1], _lut_index);
+}
+
+function mt_ui_text_end() {
+    gpu_reset_draw_kind();
+}
+
 // Drawn from a ghost's draw event, so coordinates are world pixels.
 function mt_ui_draw_name_tag(_name, _x, _y) {
-    draw_set_font(ANCHOR.get_text_font());
+    mt_ui_text_begin(CommonLutIndex.WhitePureBlack);
     var _w = string_width(_name);
-    var _left = floor(_x - _w * 0.5);
-    var _top = floor(_y);
-    draw_sprite_ext(spr_pixel, 0, _left - 2, _top - 1, _w + 4, 9, 0, c_black, 0.45);
-    draw_text_with_color(_left, _top, _name, 1.0, 1.0, c_white, 1.0);
+    draw_text_with_color(floor(_x - _w * 0.5), floor(_y), _name, 1.0, 1.0, c_white, 1.0);
+    mt_ui_text_end();
 }
 
 function mt_ui_status_line() {
@@ -62,16 +73,17 @@ function mt_ui_draw_gui(_scale) {
                 array_push(_lines, _line);
             }
         }
-        draw_set_font(ANCHOR.get_text_font());
-        var _w = 0;
-        for (var _k = 0; _k < array_length(_lines); _k++) { _w = max(_w, string_width(_lines[_k])); }
-        var _x = 4 * _s;
-        var _y = 42 * _s;
-        var _line_h = 9;
-        draw_sprite_ext(spr_pixel, 0, _x - 2 * _s, _y - 2 * _s, (_w + 4) * _s, (array_length(_lines) * _line_h + 3) * _s, 0, c_black, 0.45);
+        // Draw in the UI's own pixel scale, like the rest of the HUD.
+        var _out = window_get_output_dimensions();
+        draw_camera_override_camera(0, 0, _out[0] / _s, _out[1] / _s);
+        mt_ui_text_begin(CommonLutIndex.WhitePureBlack);
+        var _x = 6;
+        var _y = 24;
         for (var _m = 0; _m < array_length(_lines); _m++) {
-            draw_text_with_color(_x, _y + _m * _line_h * _s, _lines[_m], _s, _s, c_white, 1.0);
+            draw_text_with_color(_x, _y + _m * 10, _lines[_m], 1.0, 1.0, c_white, 1.0);
         }
+        mt_ui_text_end();
+        draw_camera_override_camera(0, 0, _out[0], _out[1]);
     } catch (_e) {
         mmapi_warn_rate_limited("mt_hud", MT_MOD, "hud draw failed: " + string(_e));
     }
