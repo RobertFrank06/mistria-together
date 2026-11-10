@@ -1,5 +1,15 @@
 # Contributor and Agent Notes
 
+## Ownership and attribution
+
+- Robert (`RobertFrank06`) is the project owner and maintainer.
+- Claude and Codex are assistant tools used by the maintainer; do not list or
+  credit them as project authors or contributors.
+- The next release is `1.1.0`; move through the `1.x` line for ordinary updates
+  (for example, `1.2.0`, `1.3.0`). Reserve a new major version such as `2.0.0`
+  for a genuinely major compatibility or product change. Use patch versions
+  for fixes between minor releases.
+
 ## Project map
 
 - `mod/mt/gml/`: in-game mod scripts.

@@ -1,6 +1,6 @@
 [package]
 name = "mistria-together"
-version = "0.3.0"
+version = "1.1.0"
 edition = "2021"
 description = "Companion program for the Mistria Together co-op mod: networking, session hub and the file bridge to the game"
 license = "GPL-3.0-or-later"

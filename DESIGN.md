@@ -38,6 +38,30 @@ relationships, and most quests are personal. Sources: ConcernedApe's
 and the current [multiplayer overview](https://stardewvalleywiki.com/Multiplayer)
 and [day-cycle rules](https://stardewvalleywiki.com/Day_Cycle).
 
+## Multiplayer menu direction
+
+The title screen should place **Multiplayer** in the game's normal vertical
+button list, immediately after **New Game**. Selecting it opens a Mistria-styled
+menu with **Join**, **Host**, and **Settings** choices. Keep the in-game `F9`
+shortcut for session status and disconnect.
+
+The Join flow should offer nearby games, saved friends, adding a friend, and
+direct joining by hostname or IP address. Saved friend names are local labels,
+not verified Steam identities. The host flow explains that hosting begins when
+the host loads a save. Joining still begins when a guest loads a local save;
+persistent farmhand saves are future work.
+
+Use Mistria's own menu-button visuals and vertical input-pilot navigation. Keep
+long nearby/friend lists navigable without letting them overflow the screen.
+Settings retain the existing local HUD/name-tag, movement smoothing, and
+session-password controls.
+
+Approaches considered: a chain of ordinary popups would reuse more current
+code, but it would make the choice hierarchy and longer friend lists awkward.
+A dedicated Mistria-styled menu flow is selected because it gives players the
+clear Join/Host/Settings entry and room to browse friends. This is a menu
+reorganization; it does not change save ownership or synchronization behavior.
+
 ## Current implementation
 
 - The host's snapshots synchronize farm grids, calendar, time, weather,

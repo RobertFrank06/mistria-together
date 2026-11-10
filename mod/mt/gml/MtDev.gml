@@ -8,6 +8,7 @@
 // against each other headlessly.
 //
 //   MISTRIA_TOGETHER_DEV=new|continue   start a new game / load the latest save
+//   MISTRIA_TOGETHER_DEV=menu-*         leave the title open on a menu page
 //   MISTRIA_TOGETHER_DEV_NAME=<name>    character name for a new game
 //   MISTRIA_TOGETHER_DEV_LOOK=<n>       vary the default look (hair / outfit colour)
 //
@@ -33,6 +34,10 @@ function mt_dev_state() {
 function mt_dev_on_title(_ctx) {
     var _dev = mt_dev_state();
     if (!_dev.enabled || _dev.started || _dev.mode == "title") { return; }
+    if (string_copy(_dev.mode, 1, 5) == "menu-") {
+        _dev.started = true;
+        return;
+    }
     _dev.started = true;
     new_chain()
         .join(LinkId.Timer, 30)

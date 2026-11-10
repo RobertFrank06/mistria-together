@@ -9,7 +9,7 @@
 // and the companion does all of the networking.
 
 #macro MT_MOD "mistria_together"
-#macro MT_VERSION "0.3.0"
+#macro MT_VERSION "1.1.0"
 // Bumped whenever game-to-game messages change shape. Peers with a different
 // value are refused by the companion before they ever reach the game.
 #macro MT_PROTO 1

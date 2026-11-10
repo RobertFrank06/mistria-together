@@ -47,10 +47,11 @@ To undo the companion setup, run `mistria-together uninstall` from a terminal. T
 ## Play
 
 1. Start Fields of Mistria. The helper runs in the background after setup.
-2. Choose **Multiplayer** on the title screen, or press `F9` while playing. The title screen button is also available when starting a save directly.
-3. The host chooses **Host**. Friends on the same local network can find the session under **Nearby**. For internet play, use a VPN or relay; add the host's hostname/IP under **Friends** once. DNS names work when the VPN or network resolves them.
-4. Guests choose **Join**, select a discovered local session or enter an address, then load a save. The order does not matter; joining begins when the guest loads into the world.
-5. The in-game status and player list appear in the top-left corner. Press `F9` to hide or show the HUD. **Settings** controls local HUD/name-tag display, movement smoothing, and the session password. Open Multiplayer again to see the session status or disconnect.
+2. Choose **Multiplayer** in the title menu, below **New Game**, or press `F9` while playing.
+3. The host chooses **Host**, then loads a save. Hosting starts when the farm loads.
+4. Guests choose **Join Multiplayer**, then **Nearby Games**, a saved friend, **Add Friend**, or **Direct Join**. Friend names are labels you choose; save a friend's hostname or IP once to reconnect without retyping it. DNS names work when the network or VPN resolves them.
+5. After choosing a host, the guest loads a local save to begin joining. Guest farmhand saves are not implemented yet, so the guest's selected save is backed up before the host's world is applied.
+6. The in-game status and player list appear in the top-left corner. Press `F9` to hide or show the HUD. **Settings** controls local HUD/name-tag display, movement smoothing, and the session password. Open Multiplayer again to see the session status or disconnect.
 
 For internet play without a VPN or relay, the host must forward TCP and UDP port 7777 on their router and share their public address. The companion's terminal mode prints local and Tailscale addresses; the in-game menu mode runs quietly in the background.
 
