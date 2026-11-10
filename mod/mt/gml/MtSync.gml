@@ -24,7 +24,7 @@
 #macro MT_SYNC_NEAR_RADIUS 12
 #macro MT_SYNC_NEAR_INTERVAL 4
 #macro MT_SYNC_SIG_INTERVAL 10
-#macro MT_SYNC_SWEEP_CELLS 1200
+#macro MT_SYNC_SWEEP_CELLS 600
 #macro MT_SYNC_TERRAIN_BATCH 120
 
 function mt_sync_state() {
@@ -53,6 +53,7 @@ function mt_sync_reset() {
         ry: undefined,
         gk: undefined,
         wet: undefined,
+        live: {},                   // "x:y" of an object's top-left -> object id
         sigs: {},
         sig_frame: {},
         cursor: 0,
@@ -98,6 +99,7 @@ function mt_sync_on_new_day(_ctx) {
     if (mt_is_host()) {
         // Crops grew, weather rolled, shops restocked: everyone gets the new morning.
         _s.send_all = true;
+        _s.grid = undefined;
     } else {
         // A guest cannot end the day alone; fall back in line with the host.
         _s.want_snapshot = true;
@@ -342,7 +344,9 @@ function mt_sync_apply_snapshot(_snap, _terrain_buffer) {
         } else {
             _target = GRIDS[_was.location_id];
         }
-        GRID = _target;
+        // GRID itself is left alone: the room swap installs the new grid, and
+        // until then the player must keep colliding with objects that still
+        // have renderers.
         var _itinerary = TaxiItinerary(location_id_to_gm_room(_target.location_id), _dyn_index);
         _itinerary.set_instant(true);
         if (_target.location_id == _was.location_id) {
@@ -452,8 +456,19 @@ function mt_sync_baseline(_grid) {
     _s.gk = array_create(_n, undefined);
     _s.wet = array_create(_n, false);
     array_copy(_s.oid, 0, _grid.node_object_id, 0, _n);
-    array_copy(_s.rx, 0, _grid.node_top_left_x, 0, _n);
-    array_copy(_s.ry, 0, _grid.node_top_left_y, 0, _n);
+    var _ids = _grid.node_object_id;
+    var _parents = _grid.node_parent;
+    var _live = {};
+    for (var _i = 0; _i < _n; _i++) {
+        if (_ids[_i] != undefined) {
+            var _px = _parents[_i].top_left_x;
+            var _py = _parents[_i].top_left_y;
+            _s.rx[_i] = _px;
+            _s.ry[_i] = _py;
+            _live[$ (string(_px) + ":" + string(_py))] = _ids[_i];
+        }
+    }
+    _s.live = _live;
     array_copy(_s.gk, 0, _grid.node_terrain_ground_kind, 0, _n);
     array_copy(_s.wet, 0, _grid.node_terrain_is_watered, 0, _n);
     _s.sigs = {};
@@ -475,9 +490,10 @@ function mt_sync_rebaseline_rect(_grid, _x0, _y0, _x1, _y1) {
     for (var _yy = _y0; _yy <= _y1; _yy++) {
         for (var _xx = _x0; _xx <= _x1; _xx++) {
             var _ni = _yy * _w + _xx;
-            _s.oid[_ni] = _grid.node_object_id[_ni];
-            _s.rx[_ni] = _grid.node_top_left_x[_ni];
-            _s.ry[_ni] = _grid.node_top_left_y[_ni];
+            var _o = _grid.node_object_id[_ni];
+            _s.oid[_ni] = _o;
+            _s.rx[_ni] = _o == undefined ? undefined : _grid.node_parent[_ni].top_left_x;
+            _s.ry[_ni] = _o == undefined ? undefined : _grid.node_parent[_ni].top_left_y;
             _s.gk[_ni] = _grid.node_terrain_ground_kind[_ni];
             _s.wet[_ni] = _grid.node_terrain_is_watered[_ni];
         }
@@ -512,29 +528,60 @@ function mt_sync_emit_object(_grid, _node) {
     return _sig;
 }
 
+// Find a cell occupied by the object whose footprint starts at (_x, _y). The
+// top-left cell itself is often empty (a tree only blocks its trunk).
+function mt_sync_find_by_root(_grid, _x, _y) {
+    var _w = _grid.dims.x;
+    var _x1 = min(_w - 1, _x + 12);
+    var _y1 = min(_grid.dims.y - 1, _y + 12);
+    for (var _yy = max(0, _y); _yy <= _y1; _yy++) {
+        for (var _xx = max(0, _x); _xx <= _x1; _xx++) {
+            var _ni = _yy * _w + _xx;
+            if (_grid.node_object_id[_ni] == undefined) { continue; }
+            var _p = _grid.node_parent[_ni];
+            if (_p.top_left_x == _x && _p.top_left_y == _y) { return _ni; }
+        }
+    }
+    return undefined;
+}
+
 // Compare one cell against the private copy and report what changed.
 function mt_sync_scan_cell(_s, _grid, _ni, _xx, _yy) {
     var _oid = _grid.node_object_id[_ni];
-    var _rx = _grid.node_top_left_x[_ni];
-    var _ry = _grid.node_top_left_y[_ni];
+    var _rx = undefined;
+    var _ry = undefined;
+    if (_oid != undefined) {
+        // An object's identity is the top-left cell of its footprint.
+        var _parent = _grid.node_parent[_ni];
+        _rx = _parent.top_left_x;
+        _ry = _parent.top_left_y;
+    }
     var _old = _s.oid[_ni];
     if (_oid != _old || _rx != _s.rx[_ni] || _ry != _s.ry[_ni]) {
-        var _was_root = _old != undefined && _s.rx[_ni] == _xx && _s.ry[_ni] == _yy;
-        var _is_root = _oid != undefined && _rx == _xx && _ry == _yy;
+        var _old_key = _old == undefined ? undefined : string(_s.rx[_ni]) + ":" + string(_s.ry[_ni]);
+        var _new_key = _oid == undefined ? undefined : string(_rx) + ":" + string(_ry);
+        var _old_x = _s.rx[_ni];
+        var _old_y = _s.ry[_ni];
         _s.oid[_ni] = _oid;
         _s.rx[_ni] = _rx;
         _s.ry[_ni] = _ry;
-        var _key = string(_xx) + ":" + string(_yy);
-        if (_is_root) {
+        // Objects never shrink: a cell that stopped belonging to one means
+        // the whole object is gone. `live` makes sure it is reported once.
+        if (_old_key != undefined && _old_key != _new_key && _s.live[$ _old_key] != undefined) {
+            struct_remove(_s.live, _old_key);
+            struct_remove(_s.sigs, _old_key);
+            if (mt_sync_object_synced(_old)) {
+                mt_send(MT_TO_ALL, { t: "wd", g: mt_sync_grid_ref(_grid), x: _old_x, y: _old_y });
+                _s.sent += 1;
+            }
+        }
+        if (_new_key != undefined && _s.live[$ _new_key] != _oid) {
+            _s.live[$ _new_key] = _oid;
             var _sig = mt_sync_emit_object(_grid, _grid.node_parent[_ni]);
             if (_sig != undefined) {
-                _s.sigs[$ _key] = _sig;
-                _s.sig_frame[$ _key] = __mt_rt().frame;
+                _s.sigs[$ _new_key] = _sig;
+                _s.sig_frame[$ _new_key] = __mt_rt().frame;
             }
-        } else if (_was_root && mt_sync_object_synced(_old)) {
-            mt_send(MT_TO_ALL, { t: "wd", g: mt_sync_grid_ref(_grid), x: _xx, y: _yy });
-            _s.sent += 1;
-            struct_remove(_s.sigs, _key);
         }
     }
     // Soil lives on a 2x2 lattice; the even cell speaks for its block.
@@ -558,15 +605,19 @@ function mt_sync_scan_signatures(_s, _grid, _cx, _cy) {
     var _y0 = max(0, _cy - MT_SYNC_NEAR_RADIUS);
     var _x1 = min(_w - 1, _cx + MT_SYNC_NEAR_RADIUS);
     var _y1 = min(_grid.dims.y - 1, _cy + MT_SYNC_NEAR_RADIUS);
+    var _seen = {};
     for (var _yy = _y0; _yy <= _y1; _yy++) {
         for (var _xx = _x0; _xx <= _x1; _xx++) {
             var _ni = _yy * _w + _xx;
             var _oid = _grid.node_object_id[_ni];
-            if (_oid == undefined || _grid.node_top_left_x[_ni] != _xx || _grid.node_top_left_y[_ni] != _yy) { continue; }
+            if (_oid == undefined) { continue; }
+            var _p = _grid.node_parent[_ni];
+            var _key = string(_p.top_left_x) + ":" + string(_p.top_left_y);
+            if (_seen[$ _key] != undefined) { continue; }
+            _seen[$ _key] = true;
             if (!mt_sync_object_synced(_oid)) { continue; }
-            var _key = string(_xx) + ":" + string(_yy);
             var _sig = undefined;
-            try { _sig = json_stringify(mt_sync_object_data(_grid.node_parent[_ni])); } catch (_e) { continue; }
+            try { _sig = json_stringify(mt_sync_object_data(_p)); } catch (_e) { continue; }
             var _known = _s.sigs[$ _key];
             if (_known == undefined) {
                 _s.sigs[$ _key] = _sig;
@@ -576,7 +627,7 @@ function mt_sync_scan_signatures(_s, _grid, _cx, _cy) {
                 var _last = _s.sig_frame[$ _key];
                 if (_last != undefined && _frame - _last < 30) { continue; }
                 _s.sig_frame[$ _key] = _frame;
-                _s.sigs[$ _key] = mt_sync_emit_object(_grid, _grid.node_parent[_ni]) ?? _sig;
+                _s.sigs[$ _key] = mt_sync_emit_object(_grid, _p) ?? _sig;
             }
         }
     }
@@ -645,21 +696,24 @@ function mt_sync_apply_object(_d) {
     var _grid = mt_sync_find_grid(_d[$ "g"]);
     var _obj = _d[$ "o"];
     if (_grid == undefined || !is_struct(_obj) || !is_numeric(_d[$ "x"]) || !is_numeric(_d[$ "y"])) { return; }
-    var _ni = _grid.try_node_index_for_cell(_d.x, _d.y);
-    if (_ni == undefined) { return; }
+    if (_grid.try_node_index_for_cell(_d.x, _d.y) == undefined) { return; }
     var _oid = try_string_to_object_id(_obj[$ "object_id"]);
     if (_oid == undefined || !mt_sync_object_synced(_oid)) { return; }
-    // Whatever stands on the root cell makes way for the incoming object.
-    if (_grid.node_object_id[_ni] != undefined) { erase_object_node(_grid, _ni); }
+    // An older version of the same object makes way for the incoming one.
+    var _existing = mt_sync_find_by_root(_grid, _d.x, _d.y);
+    if (_existing != undefined) { erase_object_node(_grid, _existing); }
     _grid.load_objects([_obj], mt_sync_inventories(_d[$ "iv"]));
 
     var _s = mt_sync_state();
     if (_s.grid == _grid) {
-        mt_sync_rebaseline_rect(_grid, _d.x - 1, _d.y - 1, _d.x + 12, _d.y + 12);
-        var _node = _grid.node_object_id[_ni] != undefined ? _grid.node_parent[_ni] : undefined;
         var _key = string(_d.x) + ":" + string(_d.y);
-        if (_node != undefined) {
-            try { _s.sigs[$ _key] = json_stringify(mt_sync_object_data(_node)); } catch (_e) {}
+        mt_sync_rebaseline_rect(_grid, _d.x - 1, _d.y - 1, _d.x + 12, _d.y + 12);
+        var _ni = mt_sync_find_by_root(_grid, _d.x, _d.y);
+        if (_ni != undefined) {
+            _s.live[$ _key] = _grid.node_object_id[_ni];
+            try { _s.sigs[$ _key] = json_stringify(mt_sync_object_data(_grid.node_parent[_ni])); } catch (_e) {}
+        } else {
+            struct_remove(_s.live, _key);
         }
     }
 }
@@ -667,15 +721,15 @@ function mt_sync_apply_object(_d) {
 function mt_sync_apply_delete(_d) {
     var _grid = mt_sync_find_grid(_d[$ "g"]);
     if (_grid == undefined || !is_numeric(_d[$ "x"]) || !is_numeric(_d[$ "y"])) { return; }
-    var _ni = _grid.try_node_index_for_cell(_d.x, _d.y);
-    if (_ni == undefined || _grid.node_object_id[_ni] == undefined) { return; }
-    if (_grid.node_top_left_x[_ni] != _d.x || _grid.node_top_left_y[_ni] != _d.y) { return; }
-    if (!mt_sync_object_synced(_grid.node_object_id[_ni])) { return; }
+    var _ni = mt_sync_find_by_root(_grid, _d.x, _d.y);
+    if (_ni == undefined || !mt_sync_object_synced(_grid.node_object_id[_ni])) { return; }
     erase_object_node(_grid, _ni);
     var _s = mt_sync_state();
     if (_s.grid == _grid) {
+        var _key = string(_d.x) + ":" + string(_d.y);
         mt_sync_rebaseline_rect(_grid, _d.x - 1, _d.y - 1, _d.x + 12, _d.y + 12);
-        struct_remove(_s.sigs, string(_d.x) + ":" + string(_d.y));
+        struct_remove(_s.live, _key);
+        struct_remove(_s.sigs, _key);
     }
 }
 
@@ -799,6 +853,14 @@ function mt_sync_dev_command(_cmd) {
             var _node = GRID.node_parent[GRID.node_index_for_cell(_x, _y)];
             _node.hitpoints -= 1;
             break;
+        case "sig":
+            var _sni = GRID.node_index_for_cell(_x, _y);
+            var _ss = mt_sync_state();
+            mt_dev_note("sig known=" + string(_ss.sigs[$ (string(_x) + ":" + string(_y))] != undefined)
+                + " frame=" + string(_ss.sig_frame[$ (string(_x) + ":" + string(_y))])
+                + " tracking=" + string(_ss.grid == GRID));
+            mt_dev_note("sig " + string_copy(json_stringify(mt_sync_object_data(GRID.node_parent[_sni])), 1, 300));
+            break;
         case "newday":
             new_day();
             break;
@@ -806,9 +868,13 @@ function mt_sync_dev_command(_cmd) {
             var _cni = GRID.node_index_for_cell(_x, _y);
             var _oid = GRID.node_object_id[_cni];
             var _hp = undefined;
-            if (_oid != undefined) { _hp = GRID.node_parent[_cni][$ "hitpoints"]; }
+            var _tl = "";
+            if (_oid != undefined) {
+                _hp = GRID.node_parent[_cni][$ "hitpoints"];
+                _tl = " root=" + string(GRID.node_parent[_cni].top_left_x) + "," + string(GRID.node_parent[_cni].top_left_y);
+            }
             mt_dev_note("cell " + string(_x) + "," + string(_y) + " obj=" + (_oid == undefined ? "none" : object_id_to_string(_oid))
-                + " hp=" + string(_hp)
+                + " hp=" + string(_hp) + _tl
                 + " gk=" + string(GRID.node_terrain_ground_kind[_cni]) + " wet=" + string(GRID.node_terrain_is_watered[_cni]));
             break;
         case "find":
@@ -816,7 +882,7 @@ function mt_sync_dev_command(_cmd) {
             var _found = 0;
             for (var _fi = 0; _fi < GRID.node_len && _found < 12; _fi++) {
                 var _fo = GRID.node_object_id[_fi];
-                if (_fo == undefined || GRID.node_top_left_x[_fi] != _fi % GRID.dims.x || GRID.node_top_left_y[_fi] != _fi div GRID.dims.x) { continue; }
+                if (_fo == undefined || GRID.node_parent[_fi].top_left_x != _fi % GRID.dims.x || GRID.node_parent[_fi].top_left_y != _fi div GRID.dims.x) { continue; }
                 if (_cmd[$ "category"] != undefined && object_id_to_object_category(_fo) != _cmd.category) { continue; }
                 mt_dev_note("obj " + object_id_to_string(_fo) + " @" + string(_fi % GRID.dims.x) + "," + string(_fi div GRID.dims.x)
                     + " cat=" + string(object_id_to_object_category(_fo)));
@@ -833,10 +899,35 @@ function mt_sync_dev_state() {
         var _n = GRID.node_len;
         var _w = GRID.dims.x;
         for (var _i = 0; _i < _n; _i++) {
-            if (GRID.node_object_id[_i] != undefined && GRID.node_top_left_x[_i] == _i % _w && GRID.node_top_left_y[_i] == _i div _w) { _objects += 1; }
+            if (GRID.node_object_id[_i] != undefined && GRID.node_parent[_i].top_left_x == _i % _w && GRID.node_parent[_i].top_left_y == _i div _w) { _objects += 1; }
         }
     }
+    // Everything within reach of the player, as comparable text: two games
+    // that agree about the world produce the same list.
+    var _near = [];
+    if (GRID != undefined && instance_exists(obj_ari)) {
+        var _cx = floor(obj_ari.x / OBJECT_CELL_SIZE);
+        var _cy = floor(obj_ari.y / OBJECT_CELL_SIZE);
+        var _seen = {};
+        var _gw = GRID.dims.x;
+        for (var _yy = max(0, _cy - 14); _yy <= min(GRID.dims.y - 1, _cy + 14); _yy++) {
+            for (var _xx = max(0, _cx - 14); _xx <= min(_gw - 1, _cx + 14); _xx++) {
+                var _ni = _yy * _gw + _xx;
+                if ((_xx & 1) == 0 && (_yy & 1) == 0 && (GRID.node_terrain_ground_kind[_ni] == GroundKind.Soil)) {
+                    array_push(_near, "soil@" + string(_xx) + "," + string(_yy) + (GRID.node_terrain_is_watered[_ni] ? "#wet" : "#dry"));
+                }
+                if (GRID.node_object_id[_ni] == undefined) { continue; }
+                var _p = GRID.node_parent[_ni];
+                var _key = string(_p.top_left_x) + "," + string(_p.top_left_y);
+                if (_seen[$ _key] != undefined) { continue; }
+                _seen[$ _key] = true;
+                array_push(_near, object_id_to_string(_p.object_id) + "@" + _key + "#" + string(_p[$ "hitpoints"]) + "/" + string(_p[$ "stage"]));
+            }
+        }
+        array_sort(_near, true);
+    }
     return {
+        near: _near,
         adopted: _s.adopted,
         applied: _s.applied,
         want: _s.want_snapshot,

@@ -91,7 +91,7 @@ function mt_dev_run(_cmd) {
     var _dev = mt_dev_state();
     switch (_cmd[$ "cmd"]) {
         case "tp":
-            ari_teleport_to_room(_cmd.room, _cmd.x, _cmd.y);
+            ari_teleport_to_room(string_to_location_id(_cmd.room), _cmd.x, _cmd.y);
             break;
         case "pos":
             obj_ari.x = _cmd.x;
@@ -109,9 +109,6 @@ function mt_dev_run(_cmd) {
             break;
         case "weather":
             WEATHER.set_weather(_cmd.w);
-            break;
-        case "save":
-            save_game();
             break;
         case "trace":
             // Dump and clear the motion trace.
