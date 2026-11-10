@@ -33,8 +33,17 @@ pub fn log_to_file(path: Option<PathBuf>) {
 #[doc(hidden)]
 pub fn log_line(args: std::fmt::Arguments<'_>) {
     use std::io::Write;
-    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    let line = format!("[{:02}:{:02}:{:02}] {}", (secs / 3600) % 24, (secs / 60) % 60, secs % 60, args);
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let line = format!(
+        "[{:02}:{:02}:{:02}] {}",
+        (secs / 3600) % 24,
+        (secs / 60) % 60,
+        secs % 60,
+        args
+    );
     println!("{line}");
     if let Some(file) = LOG_FILE.lock().unwrap().as_mut() {
         let _ = writeln!(file, "{line}");
@@ -87,15 +96,27 @@ impl Companion {
                 let key = format!("{}{}", bridge::new_epoch(), bridge::new_epoch());
                 let started = hub::Hub::start(
                     SocketAddr::from(([0, 0, 0, 0], *port)),
-                    hub::HubConfig { password: opts.password.clone(), host_key: Some(key.clone()) },
+                    hub::HubConfig {
+                        password: opts.password.clone(),
+                        host_key: Some(key.clone()),
+                    },
                 )
                 .await?;
                 hub_addr = Some(started.tcp_addr);
                 let actual = started.tcp_addr.port();
                 hub = Some(client::LocalHub { hub: started, key });
-                client::Desired::Host { port: actual, relay: None }
+                client::Desired::Host {
+                    port: actual,
+                    relay: None,
+                }
             }
-            Mode::Host { port, relay: Some(addr) } => client::Desired::Host { port: *port, relay: Some(addr.clone()) },
+            Mode::Host {
+                port,
+                relay: Some(addr),
+            } => client::Desired::Host {
+                port: *port,
+                relay: Some(addr.clone()),
+            },
             Mode::Join { addr } => client::Desired::Join { addr: addr.clone() },
         };
 
@@ -104,15 +125,35 @@ impl Companion {
         let (to_game, from_net) = std::sync::mpsc::channel();
         let stop = Arc::new(AtomicBool::new(false));
         let adopt = matches!(opts.mode, Mode::Menu);
-        let bridge = bridge::Bridge::new(opts.ipc_dirs.clone(), to_net, from_net, stop.clone(), published.clone(), adopt);
-        let bridge = std::thread::Builder::new().name("bridge".into()).spawn(move || bridge.run())?;
+        let bridge = bridge::Bridge::new(
+            opts.ipc_dirs.clone(),
+            to_net,
+            from_net,
+            stop.clone(),
+            published.clone(),
+            adopt,
+        );
+        let bridge = std::thread::Builder::new()
+            .name("bridge".into())
+            .spawn(move || bridge.run())?;
         let lan = tokio::spawn(lan::listen(published.clone(), bridge::new_epoch()));
         let net = tokio::spawn(client::run(
-            client::NetOptions { initial, password: opts.password.clone(), hub, published },
+            client::NetOptions {
+                initial,
+                password: opts.password.clone(),
+                hub,
+                published,
+            },
             from_bridge,
             to_game,
         ));
-        Ok(Companion { hub_addr, stop, net, lan, bridge: Some(bridge) })
+        Ok(Companion {
+            hub_addr,
+            stop,
+            net,
+            lan,
+            bridge: Some(bridge),
+        })
     }
 
     pub fn stop(mut self) {

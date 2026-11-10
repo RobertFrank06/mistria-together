@@ -111,8 +111,12 @@ function mt_dev_run(_cmd) {
             WEATHER.set_weather(_cmd.w);
             break;
         case "menu":
-            // Drive the Multiplayer menu: open | host | join <addr> | joinlan | off
+            // Drive the Multiplayer menu and its views in the isolated rig.
             if (_cmd.action == "open") { mt_menu_open(); }
+            else if (_cmd.action == "more") { mt_menu_more(); }
+            else if (_cmd.action == "connections") { mt_menu_connections(); }
+            else if (_cmd.action == "friends") { mt_menu_friends(); }
+            else if (_cmd.action == "settings") { mt_menu_settings(); }
             else if (_cmd.action == "pick") { mt_menu_on_join(0); }
             else if (_cmd.action == "type") { mt_menu_on_join(99); }
             else if (_cmd.action == "host") { mt_menu_on_host(); }

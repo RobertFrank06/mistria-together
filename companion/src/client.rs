@@ -28,8 +28,13 @@ pub struct NetConfig {
 pub enum Desired {
     Off,
     /// Host from this machine, or through a relay when `relay` is set.
-    Host { port: u16, relay: Option<String> },
-    Join { addr: String },
+    Host {
+        port: u16,
+        relay: Option<String>,
+    },
+    Join {
+        addr: String,
+    },
 }
 
 /// An embedded hub this companion is hosting on.
@@ -61,11 +66,18 @@ const RETRY_DELAY: Duration = Duration::from_secs(3);
 const UDP_OK_WINDOW: Duration = Duration::from_secs(6);
 
 fn status(to_game: &Sender<ToGame>, state: &str, detail: impl Into<String>) {
-    let _ = to_game.send(ToGame::Status { state: state.into(), detail: detail.into() });
+    let _ = to_game.send(ToGame::Status {
+        state: state.into(),
+        detail: detail.into(),
+    });
 }
 
 fn system(to_game: &Sender<ToGame>, value: serde_json::Value) {
-    let _ = to_game.send(ToGame::Msg { from: -1, unreliable: false, json: value.to_string() });
+    let _ = to_game.send(ToGame::Msg {
+        from: -1,
+        unreliable: false,
+        json: value.to_string(),
+    });
 }
 
 fn is_ready(game: &Option<GameInfo>) -> bool {
@@ -73,10 +85,16 @@ fn is_ready(game: &Option<GameInfo>) -> bool {
 }
 
 fn desired_from(control: &Control) -> Desired {
-    let port = if control.port >= 1.0 && control.port <= 65535.0 { control.port as u16 } else { DEFAULT_PORT };
+    let port = if control.port >= 1.0 && control.port <= 65535.0 {
+        control.port as u16
+    } else {
+        DEFAULT_PORT
+    };
     match control.mode.as_str() {
         "host" => Desired::Host { port, relay: None },
-        "join" if !control.addr.trim().is_empty() => Desired::Join { addr: control.addr.trim().to_string() },
+        "join" if !control.addr.trim().is_empty() => Desired::Join {
+            addr: control.addr.trim().to_string(),
+        },
         _ => Desired::Off,
     }
 }
@@ -106,8 +124,16 @@ impl State {
 }
 
 /// Runs until the bridge goes away.
-pub async fn run(opts: NetOptions, mut from_bridge: UnboundedReceiver<ToNet>, to_game: Sender<ToGame>) {
-    let mut st = State { desired: opts.initial, password: opts.password, game: None };
+pub async fn run(
+    opts: NetOptions,
+    mut from_bridge: UnboundedReceiver<ToNet>,
+    to_game: Sender<ToGame>,
+) {
+    let mut st = State {
+        desired: opts.initial,
+        password: opts.password,
+        game: None,
+    };
     let mut hub: Option<LocalHub> = opts.hub;
     let mut hub_password = st.password.clone();
     let published = opts.published;
@@ -117,7 +143,9 @@ pub async fn run(opts: NetOptions, mut from_bridge: UnboundedReceiver<ToNet>, to
             let mut p = published.lock().unwrap();
             (p.mode, p.addr) = match &st.desired {
                 Desired::Off => ("off".to_string(), String::new()),
-                Desired::Host { relay, .. } => ("host".to_string(), relay.clone().unwrap_or_default()),
+                Desired::Host { relay, .. } => {
+                    ("host".to_string(), relay.clone().unwrap_or_default())
+                }
                 Desired::Join { addr } => ("join".to_string(), addr.clone()),
             };
         }
@@ -130,13 +158,25 @@ pub async fn run(opts: NetOptions, mut from_bridge: UnboundedReceiver<ToNet>, to
         match want_port {
             None => hub = None,
             Some(port) => {
-                let stale = hub.as_ref().map(|h| (port != 0 && h.hub.tcp_addr.port() != port) || hub_password != st.password).unwrap_or(false);
+                let stale = hub
+                    .as_ref()
+                    .map(|h| {
+                        (port != 0 && h.hub.tcp_addr.port() != port) || hub_password != st.password
+                    })
+                    .unwrap_or(false);
                 if stale {
                     hub = None;
                 }
                 if hub.is_none() {
-                    let key = format!("{}{}", crate::bridge::new_epoch(), crate::bridge::new_epoch());
-                    let cfg = HubConfig { password: st.password.clone(), host_key: Some(key.clone()) };
+                    let key = format!(
+                        "{}{}",
+                        crate::bridge::new_epoch(),
+                        crate::bridge::new_epoch()
+                    );
+                    let cfg = HubConfig {
+                        password: st.password.clone(),
+                        host_key: Some(key.clone()),
+                    };
                     match Hub::start(SocketAddr::from(([0, 0, 0, 0], port)), cfg).await {
                         Ok(started) => {
                             log!("hosting on port {}", started.tcp_addr.port());
@@ -174,17 +214,42 @@ pub async fn run(opts: NetOptions, mut from_bridge: UnboundedReceiver<ToNet>, to
                 let h = hub.as_ref().expect("hub running");
                 let port = h.hub.tcp_addr.port();
                 (
-                    NetConfig { hub_addr: format!("127.0.0.1:{port}"), role: Role::Host, password: st.password.clone(), host_key: Some(h.key.clone()) },
+                    NetConfig {
+                        hub_addr: format!("127.0.0.1:{port}"),
+                        role: Role::Host,
+                        password: st.password.clone(),
+                        host_key: Some(h.key.clone()),
+                    },
                     Some((beacon_id.clone(), port)),
                 )
             }
-            Desired::Host { relay: Some(addr), .. } => {
-                (NetConfig { hub_addr: addr.clone(), role: Role::Host, password: st.password.clone(), host_key: None }, None)
-            }
-            Desired::Join { addr } => (NetConfig { hub_addr: addr.clone(), role: Role::Guest, password: st.password.clone(), host_key: None }, None),
+            Desired::Host {
+                relay: Some(addr), ..
+            } => (
+                NetConfig {
+                    hub_addr: addr.clone(),
+                    role: Role::Host,
+                    password: st.password.clone(),
+                    host_key: None,
+                },
+                None,
+            ),
+            Desired::Join { addr } => (
+                NetConfig {
+                    hub_addr: addr.clone(),
+                    role: Role::Guest,
+                    password: st.password.clone(),
+                    host_key: None,
+                },
+                None,
+            ),
             Desired::Off => unreachable!(),
         };
-        status(&to_game, "connecting", format!("connecting to {}", cfg.hub_addr));
+        status(
+            &to_game,
+            "connecting",
+            format!("connecting to {}", cfg.hub_addr),
+        );
         match session(&cfg, &info, announce, &mut from_bridge, &to_game).await {
             Ended::Stop => return,
             Ended::Game(g) => st.game = g,
@@ -214,29 +279,45 @@ pub async fn run(opts: NetOptions, mut from_bridge: UnboundedReceiver<ToNet>, to
 }
 
 async fn resolve(addr: &str) -> Result<SocketAddr> {
-    let with_port = if addr.rsplit_once(':').map(|(_, p)| p.parse::<u16>().is_ok()).unwrap_or(false) && !addr.ends_with(']') {
+    let with_port = if addr
+        .rsplit_once(':')
+        .map(|(_, p)| p.parse::<u16>().is_ok())
+        .unwrap_or(false)
+        && !addr.ends_with(']')
+    {
         addr.to_string()
     } else {
         format!("{addr}:{DEFAULT_PORT}")
     };
-    let mut addrs: Vec<SocketAddr> =
-        tokio::net::lookup_host(&with_port).await.map_err(|e| anyhow!("cannot resolve {with_port}: {e}"))?.collect();
+    let mut addrs: Vec<SocketAddr> = tokio::net::lookup_host(&with_port)
+        .await
+        .map_err(|e| anyhow!("cannot resolve {with_port}: {e}"))?
+        .collect();
     addrs.sort_by_key(|a| !a.is_ipv4());
-    addrs.into_iter().next().ok_or_else(|| anyhow!("{with_port} has no address"))
+    addrs
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("{with_port} has no address"))
 }
 
 async fn connect(cfg: &NetConfig, info: &GameInfo) -> Result<(TcpStream, Welcome, SocketAddr)> {
     let addr = resolve(&cfg.hub_addr).await?;
     let mut stream = tokio::time::timeout(Duration::from_secs(6), TcpStream::connect(addr))
         .await
-        .map_err(|_| anyhow!("no answer from {addr} (is the host running, and the port reachable?)"))?
+        .map_err(|_| {
+            anyhow!("no answer from {addr} (is the host running, and the port reachable?)")
+        })?
         .map_err(|e| anyhow!("cannot reach {addr}: {e}"))?;
     let _ = stream.set_nodelay(true);
     let hello = Frame::Hello(Hello {
         wire: WIRE_VERSION,
         game_proto: info.proto,
         mod_version: info.mod_version.clone(),
-        name: if info.name.is_empty() { "Player".into() } else { info.name.clone() },
+        name: if info.name.is_empty() {
+            "Player".into()
+        } else {
+            info.name.clone()
+        },
         role: cfg.role,
         password: cfg.password.clone(),
         host_key: cfg.host_key.clone(),
@@ -245,7 +326,9 @@ async fn connect(cfg: &NetConfig, info: &GameInfo) -> Result<(TcpStream, Welcome
     match tokio::time::timeout(Duration::from_secs(8), read_frame(&mut stream)).await {
         Ok(Ok(Frame::Welcome(w))) => Ok((stream, w, addr)),
         Ok(Ok(Frame::Bye { reason })) => Err(anyhow!("{reason}")),
-        Ok(Ok(_)) => Err(anyhow!("unexpected reply from {addr} (is that a Mistria Together host?)")),
+        Ok(Ok(_)) => Err(anyhow!(
+            "unexpected reply from {addr} (is that a Mistria Together host?)"
+        )),
         Ok(Err(e)) => Err(anyhow!("connection to {addr} failed: {e}")),
         Err(_) => Err(anyhow!("{addr} did not answer the handshake")),
     }
@@ -271,15 +354,34 @@ async fn session(
     let me = welcome.id;
     log!(
         "connected to {hub_addr} as player {me}{}",
-        if welcome.host == me { " (host)".to_string() } else { format!(", host is player {}", welcome.host) }
+        if welcome.host == me {
+            " (host)".to_string()
+        } else {
+            format!(", host is player {}", welcome.host)
+        }
     );
-    system(to_game, json!({ "t": "welcome", "id": me, "host": welcome.host, "peers": welcome.peers }));
-    let connected_state = if cfg.role == Role::Host { "hosting" } else { "connected" };
-    status(to_game, connected_state, format!("{} player(s) online", welcome.peers.len() + 1));
+    system(
+        to_game,
+        json!({ "t": "welcome", "id": me, "host": welcome.host, "peers": welcome.peers }),
+    );
+    let connected_state = if cfg.role == Role::Host {
+        "hosting"
+    } else {
+        "connected"
+    };
+    status(
+        to_game,
+        connected_state,
+        format!("{} player(s) online", welcome.peers.len() + 1),
+    );
     let mut peer_count = welcome.peers.len() + 1;
     let players = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(peer_count as u32));
     let beacon = announce.map(|(id, port)| {
-        let name = if info.name.is_empty() { "Player".to_string() } else { info.name.clone() };
+        let name = if info.name.is_empty() {
+            "Player".to_string()
+        } else {
+            info.name.clone()
+        };
         crate::lan::announce(id, name, port, cfg.password.is_some(), players.clone())
     });
 
@@ -295,7 +397,11 @@ async fn session(
         }
     });
 
-    let bind: SocketAddr = if hub_addr.is_ipv4() { "0.0.0.0:0".parse().unwrap() } else { "[::]:0".parse().unwrap() };
+    let bind: SocketAddr = if hub_addr.is_ipv4() {
+        "0.0.0.0:0".parse().unwrap()
+    } else {
+        "[::]:0".parse().unwrap()
+    };
     let udp = match UdpSocket::bind(bind).await {
         Ok(s) => {
             let _ = s.connect(hub_addr).await;
@@ -442,7 +548,7 @@ async fn session(
                 if let Some(udp) = &udp {
                     let _ = udp.try_send(&udp_packet(welcome.udp_token, UDP_HELLO, None, &[]));
                 }
-                if ticks % 2 == 0 {
+                if ticks.is_multiple_of(2) {
                     let ping = Frame::Ping { t: started.elapsed().as_millis() as u64, rtt_ms }.encode();
                     if tx.try_send(ping).is_err() && tx.is_closed() {
                         break Ended::Lost("connection to the host was lost".into());

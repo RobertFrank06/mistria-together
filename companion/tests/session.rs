@@ -4,7 +4,7 @@
 
 use mistria_together::{Companion, Mode, Options};
 use serde_json::{json, Value};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 struct FakeGame {
@@ -23,7 +23,17 @@ impl FakeGame {
     fn new(dir: PathBuf, name: &str) -> FakeGame {
         std::fs::create_dir_all(&dir).unwrap();
         let sid = format!("{}{}", name.to_lowercase(), std::process::id());
-        FakeGame { dir, sid, name: name.into(), hb: 0, epoch: String::new(), in_seq: 0, out_seq: 0, ready: true, inbox: vec![] }
+        FakeGame {
+            dir,
+            sid,
+            name: name.into(),
+            hb: 0,
+            epoch: String::new(),
+            in_seq: 0,
+            out_seq: 0,
+            ready: true,
+            inbox: vec![],
+        }
     }
 
     fn write(&self, name: &str, text: &str) {
@@ -48,8 +58,13 @@ impl FakeGame {
             }
         }
         loop {
-            let path = self.dir.join(format!("l_{}_{}_{}.json", self.epoch, self.sid, self.in_seq));
-            let Ok(bytes) = std::fs::read(&path) else { break };
+            let path = self.dir.join(format!(
+                "l_{}_{}_{}.json",
+                self.epoch, self.sid, self.in_seq
+            ));
+            let Ok(bytes) = std::fs::read(&path) else {
+                break;
+            };
             std::fs::remove_file(&path).unwrap();
             self.in_seq += 1;
             let batch: Value = serde_json::from_slice(&bytes).expect("batch is valid json");
@@ -62,7 +77,10 @@ impl FakeGame {
     fn send(&mut self, to: i64, unreliable: bool, data: Value) {
         assert!(!self.epoch.is_empty(), "not paired yet");
         let batch = json!({ "m": [{ "to": to, "u": if unreliable { 1 } else { 0 }, "d": data }] });
-        self.write(&format!("g_{}_{}_{}.json", self.sid, self.epoch, self.out_seq), &batch.to_string());
+        self.write(
+            &format!("g_{}_{}_{}.json", self.sid, self.epoch, self.out_seq),
+            &batch.to_string(),
+        );
         self.out_seq += 1;
     }
 
@@ -73,7 +91,11 @@ impl FakeGame {
 }
 
 /// Pump all games until `cond` holds.
-async fn until(games: &mut [&mut FakeGame], what: &str, mut cond: impl FnMut(&mut [&mut FakeGame]) -> bool) {
+async fn until(
+    games: &mut [&mut FakeGame],
+    what: &str,
+    mut cond: impl FnMut(&mut [&mut FakeGame]) -> bool,
+) {
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
         for g in games.iter_mut() {
@@ -87,11 +109,14 @@ async fn until(games: &mut [&mut FakeGame], what: &str, mut cond: impl FnMut(&mu
     }
 }
 
-async fn host(dir: &PathBuf, password: Option<&str>) -> (Companion, String) {
+async fn host(dir: &Path, password: Option<&str>) -> (Companion, String) {
     let c = Companion::start(Options {
-        mode: Mode::Host { port: 0, relay: None },
+        mode: Mode::Host {
+            port: 0,
+            relay: None,
+        },
         password: password.map(String::from),
-        ipc_dirs: vec![dir.clone()],
+        ipc_dirs: vec![dir.to_path_buf()],
     })
     .await
     .unwrap();
@@ -99,10 +124,14 @@ async fn host(dir: &PathBuf, password: Option<&str>) -> (Companion, String) {
     (c, addr)
 }
 
-async fn join(dir: &PathBuf, addr: &str, password: Option<&str>) -> Companion {
-    Companion::start(Options { mode: Mode::Join { addr: addr.into() }, password: password.map(String::from), ipc_dirs: vec![dir.clone()] })
-        .await
-        .unwrap()
+async fn join(dir: &Path, addr: &str, password: Option<&str>) -> Companion {
+    Companion::start(Options {
+        mode: Mode::Join { addr: addr.into() },
+        password: password.map(String::from),
+        ipc_dirs: vec![dir.to_path_buf()],
+    })
+    .await
+    .unwrap()
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -113,16 +142,24 @@ async fn two_players_exchange_messages() {
     let mut g = FakeGame::new(gd.clone(), "Guest");
 
     let (_hc, addr) = host(&hd, None).await;
-    until(&mut [&mut h], "host welcome", |gs| gs[0].inbox.iter().any(|(_, d)| d["t"] == "welcome")).await;
+    until(&mut [&mut h], "host welcome", |gs| {
+        gs[0].inbox.iter().any(|(_, d)| d["t"] == "welcome")
+    })
+    .await;
     let (from, w) = h.take("welcome").unwrap();
     assert_eq!(from, -1);
     assert_eq!(w["id"], w["host"]);
     let host_id = w["id"].as_i64().unwrap();
 
     let _gc = join(&gd, &addr, None).await;
-    until(&mut [&mut h, &mut g], "guest welcome + host sees join", |gs| {
-        gs[1].inbox.iter().any(|(_, d)| d["t"] == "welcome") && gs[0].inbox.iter().any(|(_, d)| d["t"] == "join")
-    })
+    until(
+        &mut [&mut h, &mut g],
+        "guest welcome + host sees join",
+        |gs| {
+            gs[1].inbox.iter().any(|(_, d)| d["t"] == "welcome")
+                && gs[0].inbox.iter().any(|(_, d)| d["t"] == "join")
+        },
+    )
     .await;
     let (_, gw) = g.take("welcome").unwrap();
     let guest_id = gw["id"].as_i64().unwrap();
@@ -135,11 +172,16 @@ async fn two_players_exchange_messages() {
 
     // Reliable, in order, both directions, with awkward content.
     for i in 0..50 {
-        h.send(-1, false, json!({ "t": "r", "i": i, "text": "quote \" backslash \\ unicode \u{00e9}\u{1F33E}" }));
+        h.send(
+            -1,
+            false,
+            json!({ "t": "r", "i": i, "text": "quote \" backslash \\ unicode \u{00e9}\u{1F33E}" }),
+        );
         g.send(-2, false, json!({ "t": "q", "i": i }));
     }
     until(&mut [&mut h, &mut g], "100 reliable messages", |gs| {
-        gs[0].inbox.iter().filter(|(_, d)| d["t"] == "q").count() == 50 && gs[1].inbox.iter().filter(|(_, d)| d["t"] == "r").count() == 50
+        gs[0].inbox.iter().filter(|(_, d)| d["t"] == "q").count() == 50
+            && gs[1].inbox.iter().filter(|(_, d)| d["t"] == "r").count() == 50
     })
     .await;
     for i in 0..50 {
@@ -158,14 +200,23 @@ async fn two_players_exchange_messages() {
         g.pump();
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    until(&mut [&mut h, &mut g], "poses", |gs| gs[0].inbox.iter().filter(|(_, d)| d["t"] == "p").count() >= 25).await;
+    until(&mut [&mut h, &mut g], "poses", |gs| {
+        gs[0].inbox.iter().filter(|(_, d)| d["t"] == "p").count() >= 25
+    })
+    .await;
 
     // Addressed to one peer.
     h.send(guest_id, false, json!({ "t": "direct" }));
-    until(&mut [&mut h, &mut g], "direct message", |gs| gs[1].inbox.iter().any(|(_, d)| d["t"] == "direct")).await;
+    until(&mut [&mut h, &mut g], "direct message", |gs| {
+        gs[1].inbox.iter().any(|(_, d)| d["t"] == "direct")
+    })
+    .await;
 
     // Ping statistics show up.
-    until(&mut [&mut h, &mut g], "stats", |gs| gs[1].inbox.iter().any(|(_, d)| d["t"] == "stat")).await;
+    until(&mut [&mut h, &mut g], "stats", |gs| {
+        gs[1].inbox.iter().any(|(_, d)| d["t"] == "stat")
+    })
+    .await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -176,11 +227,15 @@ async fn blob_transfer_and_three_players() {
     let mut a = FakeGame::new(dirs[1].clone(), "A");
     let mut b = FakeGame::new(dirs[2].clone(), "B");
     let (_hc, addr) = host(&dirs[0], Some("pw")).await;
-    until(&mut [&mut h], "host online", |gs| gs[0].inbox.iter().any(|(_, d)| d["t"] == "welcome")).await;
+    until(&mut [&mut h], "host online", |gs| {
+        gs[0].inbox.iter().any(|(_, d)| d["t"] == "welcome")
+    })
+    .await;
     let _ac = join(&dirs[1], &addr, Some("pw")).await;
     let _bc = join(&dirs[2], &addr, Some("pw")).await;
     until(&mut [&mut h, &mut a, &mut b], "everyone online", |gs| {
-        gs[1].inbox.iter().any(|(_, d)| d["t"] == "welcome") && gs[2].inbox.iter().any(|(_, d)| d["t"] == "welcome")
+        gs[1].inbox.iter().any(|(_, d)| d["t"] == "welcome")
+            && gs[2].inbox.iter().any(|(_, d)| d["t"] == "welcome")
     })
     .await;
     let a_id = a.take("welcome").unwrap().1["id"].as_i64().unwrap();
@@ -196,18 +251,29 @@ async fn blob_transfer_and_three_players() {
     h.send(-3, false, json!({ "t": "blob", "to": a_id, "kind": "world", "file": "blob_out_1_world.json", "meta": { "day": 4 } }));
     // Ordinary traffic keeps flowing while the transfer runs.
     h.send(-1, false, json!({ "t": "during" }));
-    until(&mut [&mut h, &mut a, &mut b], "blob arrives", |gs| gs[1].inbox.iter().any(|(_, d)| d["t"] == "blob")).await;
+    until(&mut [&mut h, &mut a, &mut b], "blob arrives", |gs| {
+        gs[1].inbox.iter().any(|(_, d)| d["t"] == "blob")
+    })
+    .await;
     let (from, blob) = a.take("blob").unwrap();
     assert_eq!(from, -1);
     assert_eq!(blob["kind"], "world");
     assert_eq!(blob["meta"]["day"], 4);
     let got = std::fs::read(dirs[1].join(blob["file"].as_str().unwrap())).unwrap();
     assert!(got == data, "blob content differs");
-    assert!(!dirs[0].join("blob_out_1_world.json").exists(), "sent file is consumed");
+    assert!(
+        !dirs[0].join("blob_out_1_world.json").exists(),
+        "sent file is consumed"
+    );
     assert!(b.take("blob").is_none(), "blob was addressed to A only");
-    until(&mut [&mut h, &mut a, &mut b], "broadcast reaches both", |gs| {
-        gs[1].inbox.iter().any(|(_, d)| d["t"] == "during") && gs[2].inbox.iter().any(|(_, d)| d["t"] == "during")
-    })
+    until(
+        &mut [&mut h, &mut a, &mut b],
+        "broadcast reaches both",
+        |gs| {
+            gs[1].inbox.iter().any(|(_, d)| d["t"] == "during")
+                && gs[2].inbox.iter().any(|(_, d)| d["t"] == "during")
+        },
+    )
     .await;
 }
 
@@ -218,42 +284,66 @@ async fn guest_survives_host_leaving_and_wrong_password() {
     let mut h = FakeGame::new(hd.clone(), "Host");
     let mut g = FakeGame::new(gd.clone(), "Guest");
     let (_hc, addr) = host(&hd, Some("secret")).await;
-    until(&mut [&mut h], "host online", |gs| gs[0].inbox.iter().any(|(_, d)| d["t"] == "welcome")).await;
+    until(&mut [&mut h], "host online", |gs| {
+        gs[0].inbox.iter().any(|(_, d)| d["t"] == "welcome")
+    })
+    .await;
 
     // Wrong password: refused with a reason the player can read.
     let bad = join(&gd, &addr, Some("nope")).await;
     until(&mut [&mut h, &mut g], "refusal reaches the game", |gs| {
-        std::fs::read_to_string(gs[1].dir.join("link.json")).map(|s| s.contains("wrong password")).unwrap_or(false)
+        std::fs::read_to_string(gs[1].dir.join("link.json"))
+            .map(|s| s.contains("wrong password"))
+            .unwrap_or(false)
     })
     .await;
     assert!(g.take("welcome").is_none());
     bad.stop();
 
     let _gc = join(&gd, &addr, Some("secret")).await;
-    until(&mut [&mut h, &mut g], "guest online", |gs| gs[1].inbox.iter().any(|(_, d)| d["t"] == "welcome")).await;
+    until(&mut [&mut h, &mut g], "guest online", |gs| {
+        gs[1].inbox.iter().any(|(_, d)| d["t"] == "welcome")
+    })
+    .await;
     g.inbox.clear();
 
     // The host goes back to the title screen: the guest is told, then
     // reconnects by itself once the host is back in a save.
     h.ready = false;
-    until(&mut [&mut h, &mut g], "guest told the host left", |gs| gs[1].inbox.iter().any(|(_, d)| d["t"] == "bye")).await;
+    until(&mut [&mut h, &mut g], "guest told the host left", |gs| {
+        gs[1].inbox.iter().any(|(_, d)| d["t"] == "bye")
+    })
+    .await;
     g.inbox.clear();
     h.inbox.clear();
     h.ready = true;
     until(&mut [&mut h, &mut g], "both back online", |gs| {
-        gs[0].inbox.iter().any(|(_, d)| d["t"] == "welcome") && gs[1].inbox.iter().any(|(_, d)| d["t"] == "welcome")
+        gs[0].inbox.iter().any(|(_, d)| d["t"] == "welcome")
+            && gs[1].inbox.iter().any(|(_, d)| d["t"] == "welcome")
     })
     .await;
     g.send(-2, false, json!({ "t": "again" }));
-    until(&mut [&mut h, &mut g], "traffic after reconnect", |gs| gs[0].inbox.iter().any(|(_, d)| d["t"] == "again")).await;
+    until(&mut [&mut h, &mut g], "traffic after reconnect", |gs| {
+        gs[0].inbox.iter().any(|(_, d)| d["t"] == "again")
+    })
+    .await;
 }
 
-async fn menu(dir: &PathBuf) -> Companion {
-    Companion::start(Options { mode: Mode::Menu, password: None, ipc_dirs: vec![dir.clone()] }).await.unwrap()
+async fn menu(dir: &Path) -> Companion {
+    Companion::start(Options {
+        mode: Mode::Menu,
+        password: None,
+        ipc_dirs: vec![dir.to_path_buf()],
+    })
+    .await
+    .unwrap()
 }
 
-fn link(dir: &PathBuf) -> Value {
-    std::fs::read(dir.join("link.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(Value::Null)
+fn link(dir: &Path) -> Value {
+    std::fs::read(dir.join("link.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or(Value::Null)
 }
 
 /// The background companion does nothing until the game's menu asks, finds
@@ -267,12 +357,25 @@ async fn driven_from_the_game_menu() {
     let _hc = menu(&hd).await;
     let _gc = menu(&gd).await;
 
-    until(&mut [&mut h, &mut g], "companions idle", |gs| link(&gs[0].dir)["mode"] == "off" && link(&gs[1].dir)["mode"] == "off").await;
+    until(&mut [&mut h, &mut g], "companions idle", |gs| {
+        link(&gs[0].dir)["mode"] == "off" && link(&gs[1].dir)["mode"] == "off"
+    })
+    .await;
     assert!(h.take("welcome").is_none());
 
-    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-    h.write("control.json", &json!({ "seq": 1, "mode": "host", "port": port }).to_string());
-    until(&mut [&mut h, &mut g], "host online", |gs| gs[0].inbox.iter().any(|(_, d)| d["t"] == "welcome")).await;
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    h.write(
+        "control.json",
+        &json!({ "seq": 1, "mode": "host", "port": port }).to_string(),
+    );
+    until(&mut [&mut h, &mut g], "host online", |gs| {
+        gs[0].inbox.iter().any(|(_, d)| d["t"] == "welcome")
+    })
+    .await;
 
     // The guest's companion hears the host's beacon.
     let mut addr = format!("127.0.0.1:{port}");
@@ -281,7 +384,10 @@ async fn driven_from_the_game_menu() {
     while Instant::now() < deadline && !found {
         h.pump();
         g.pump();
-        if let Some(game) = link(&gd)["lan"].as_array().and_then(|l| l.iter().find(|e| e["name"] == "MenuHost")) {
+        if let Some(game) = link(&gd)["lan"]
+            .as_array()
+            .and_then(|l| l.iter().find(|e| e["name"] == "MenuHost"))
+        {
             assert_eq!(game["players"], 1);
             addr = game["addr"].as_str().unwrap().to_string();
             found = true;
@@ -292,19 +398,30 @@ async fn driven_from_the_game_menu() {
         assert!(found, "host was not discovered on the local network");
     }
 
-    g.write("control.json", &json!({ "seq": 1, "mode": "join", "addr": addr }).to_string());
+    g.write(
+        "control.json",
+        &json!({ "seq": 1, "mode": "join", "addr": addr }).to_string(),
+    );
     until(&mut [&mut h, &mut g], "guest online", |gs| {
         gs[1].inbox.iter().any(|(_, d)| d["t"] == "welcome") && link(&gs[1].dir)["mode"] == "join"
     })
     .await;
     g.send(-2, false, json!({ "t": "hello-host" }));
-    until(&mut [&mut h, &mut g], "message reaches host", |gs| gs[0].inbox.iter().any(|(_, d)| d["t"] == "hello-host")).await;
+    until(&mut [&mut h, &mut g], "message reaches host", |gs| {
+        gs[0].inbox.iter().any(|(_, d)| d["t"] == "hello-host")
+    })
+    .await;
 
     // Disconnect from the menu.
     g.inbox.clear();
-    g.write("control.json", &json!({ "seq": 2, "mode": "off" }).to_string());
+    g.write(
+        "control.json",
+        &json!({ "seq": 2, "mode": "off" }).to_string(),
+    );
     until(&mut [&mut h, &mut g], "guest disconnected", |gs| {
-        gs[1].inbox.iter().any(|(_, d)| d["t"] == "bye") && gs[0].inbox.iter().any(|(_, d)| d["t"] == "leave") && link(&gs[1].dir)["mode"] == "off"
+        gs[1].inbox.iter().any(|(_, d)| d["t"] == "bye")
+            && gs[0].inbox.iter().any(|(_, d)| d["t"] == "leave")
+            && link(&gs[1].dir)["mode"] == "off"
     })
     .await;
 }

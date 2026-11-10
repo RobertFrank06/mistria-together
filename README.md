@@ -19,6 +19,7 @@ It has two parts:
 | One shared farm | Guests load the host's world when they join and again every morning. In between, changes are shared live in both directions: objects placed, removed or damaged (trees, rocks, crops, furniture, chests and their contents), soil tilled and watered. Changes made while you are somewhere else are waiting when you come back. |
 | Shared time | The host's clock, calendar and weather are everyone's. Pausing on the host pauses time for all. |
 | Staying connected | The game keeps running when its window loses focus. Guests reconnect by themselves if the host restarts or the connection drops. |
+| Saved friends | Save a display label and hostname/IP once, then reconnect from the in-game Friends list. The label is chosen by you; it is not linked to Steam automatically. |
 | Low overhead | About 0.2-0.4 ms of a 16 ms frame in testing. No full-world scans, no rewriting one shared file. |
 
 ## What does not (yet)
@@ -38,8 +39,8 @@ Everyone needs the same release of both the mod and companion.
 
 1. Install [MOMI](https://github.com/Garethp/Mods-of-Mistria-Installer/releases) 0.17.0 or newer and run it once so it creates its mods folder.
 2. Download the companion package for your system from the [releases page](https://github.com/RobertFrank06/mistria-together/releases): `MistriaTogether-windows.zip`, `MistriaTogether-linux.tar.gz`, or `MistriaTogether-macos.tar.gz`.
-3. Extract the package and run `mistria-together` (Windows: `mistria-together.exe`) once. It installs a background companion that starts when you log in, and copies `MistriaTogether-mod.zip` into a MOMI mods folder it can find. If it cannot find the folder, copy that zip there yourself.
-4. Open MOMI and install Mistria Together. Remove any other multiplayer mod first.
+3. Extract the complete package and run `mistria-together` (Windows: `mistria-together.exe`) once. It installs a background companion and copies the extracted `mt` folder into the MOMI mods folder. If it cannot find the folder, copy the package's `mt` folder into MOMI's mods folder yourself.
+4. Open MOMI and press Install. MOMI needs the extracted folder with `manifest.toml` directly inside `mt`; the optional ZIP is for manual distribution only. Remove any other multiplayer mod first.
 
 To undo the companion setup, run `mistria-together uninstall` from a terminal. This removes its background startup and installed companion; remove the mod through MOMI separately.
 
@@ -47,13 +48,13 @@ To undo the companion setup, run `mistria-together uninstall` from a terminal. T
 
 1. Start Fields of Mistria. The helper runs in the background after setup.
 2. Choose **Multiplayer** on the title screen, or press `F9` while playing. The title screen button is also available when starting a save directly.
-3. The host chooses **Host**. Friends on the same local network can find the session in the join flow. For internet play, use a VPN such as Tailscale or a relay, then enter the host/relay address; the address is remembered for next time.
+3. The host chooses **Host**. Friends on the same local network can find the session under **Nearby**. For internet play, use a VPN or relay; add the host's hostname/IP under **Friends** once. DNS names work when the VPN or network resolves them.
 4. Guests choose **Join**, select a discovered local session or enter an address, then load a save. The order does not matter; joining begins when the guest loads into the world.
-5. The in-game status and player list appear in the top-left corner. Press `F9` to hide or show the HUD. Open Multiplayer again to see the session status or disconnect.
+5. The in-game status and player list appear in the top-left corner. Press `F9` to hide or show the HUD. **Settings** controls local HUD/name-tag display, movement smoothing, and the session password. Open Multiplayer again to see the session status or disconnect.
 
 For internet play without a VPN or relay, the host must forward TCP and UDP port 7777 on their router and share their public address. The companion's terminal mode prints local and Tailscale addresses; the in-game menu mode runs quietly in the background.
 
-Guests should join with a character they do not mind sharing a world with: while connected, a guest's game holds the *host's* farm, and saving stores that. The mod backs up the guest's original save under `mod_data/mistria_together/backups/` in the game's data folder before it first loads a host's world.
+The host owns the shared farm, time, weather, upgrades and decor. A guest's game adopts that world snapshot, while the guest keeps their own inventory, money, skills, relationships and story progress. The guest's original save is backed up under `mod_data/mistria_together/backups/` before the first host snapshot; that first backup is preserved across reconnects. Do not treat the backup as a save merge tool.
 
 ### Command line
 
@@ -76,7 +77,7 @@ Other options: `--data-dir <folder>` if the game's data folder is not found auto
 | Key | Default | |
 | --- | --- | --- |
 | `show_hud` | `true` | Status and player list in the corner. |
-| `hud_key` | `"F9"` | Key that toggles it. |
+| `menu_key` | `"F9"` | Key that opens Multiplayer. |
 | `name_tags` | `true` | Names above other players. |
 | `smoothing_frames` | `7` | How far behind real time others are drawn (60 = one second). Raise it on a rough connection. |
 | `send_interval` | `3` | Frames between movement updates. |
@@ -112,7 +113,7 @@ tools/package-mod.sh            # dist/MistriaTogether-mod.zip
 
 `tools/rig.sh` and `tools/e2e.sh` (Linux) set up an isolated copy of the game with its own save folder and run two real instances headless under gamescope against each other; `MISTRIA_TOGETHER_DEV` turns on the mod's test hooks (`mod/mt/gml/MtDev.gml`). The rig never touches your real install or saves.
 
-Pushing a tag such as `v0.2.0` runs tests and builds release packages for Linux, Windows and macOS. Each package contains the companion, the MOMI mod archive, license, and a short first-run guide.
+Pushing a version tag runs tests and builds release packages for Linux, Windows and macOS. Each package contains the companion, the extracted MOMI mod folder, a convenience mod ZIP, license, and a short first-run guide.
 
 ## License
 

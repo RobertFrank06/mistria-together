@@ -31,17 +31,33 @@ struct Header {
 }
 
 fn valid_kind(kind: &str) -> bool {
-    !kind.is_empty() && kind.len() <= 24 && kind.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+    !kind.is_empty()
+        && kind.len() <= 24
+        && kind
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
 }
 
 /// Handle `{t:"blob", to, kind, file, meta}` from the game.
-pub async fn send(dir: &Path, req: &serde_json::Value, blob_id: u32, tx: Sender<Vec<u8>>) -> Result<()> {
-    let file = req.get("file").and_then(|v| v.as_str()).ok_or_else(|| anyhow!("blob request without a file"))?;
+pub async fn send(
+    dir: &Path,
+    req: &serde_json::Value,
+    blob_id: u32,
+    tx: Sender<Vec<u8>>,
+) -> Result<()> {
+    let file = req
+        .get("file")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("blob request without a file"))?;
     // The game only ever names files it just wrote next to its batches.
     if !file.starts_with("blob_out_") || file.contains(['/', '\\']) || file.contains("..") {
         bail!("refusing to send {file:?}");
     }
-    let kind = req.get("kind").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let kind = req
+        .get("kind")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if !valid_kind(&kind) {
         bail!("bad blob kind {kind:?}");
     }
@@ -55,9 +71,14 @@ pub async fn send(dir: &Path, req: &serde_json::Value, blob_id: u32, tx: Sender<
     let path = dir.join(file);
 
     let packed = tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
-        let raw = std::fs::read(&path).map_err(|e| anyhow!("cannot read {}: {e}", path.display()))?;
+        let raw =
+            std::fs::read(&path).map_err(|e| anyhow!("cannot read {}: {e}", path.display()))?;
         let _ = std::fs::remove_file(&path);
-        let header = serde_json::to_vec(&Header { kind, meta, raw_len: raw.len() as u64 })?;
+        let header = serde_json::to_vec(&Header {
+            kind,
+            meta,
+            raw_len: raw.len() as u64,
+        })?;
         let mut out = Vec::with_capacity(raw.len() / 6 + header.len() + 16);
         out.extend_from_slice(&(header.len() as u32).to_be_bytes());
         out.extend_from_slice(&header);
@@ -76,8 +97,15 @@ pub async fn send(dir: &Path, req: &serde_json::Value, blob_id: u32, tx: Sender<
         payload.extend_from_slice(&(idx as u32).to_be_bytes());
         payload.extend_from_slice(&total.to_be_bytes());
         payload.extend_from_slice(chunk);
-        let frame = Frame::Relay { peer: to, kind: RelayKind::Blob, payload }.encode();
-        tx.send(frame).await.map_err(|_| anyhow!("connection closed"))?;
+        let frame = Frame::Relay {
+            peer: to,
+            kind: RelayKind::Blob,
+            payload,
+        }
+        .encode();
+        tx.send(frame)
+            .await
+            .map_err(|_| anyhow!("connection closed"))?;
     }
     Ok(())
 }
@@ -103,7 +131,12 @@ pub struct Assembler {
 
 impl Assembler {
     pub fn new(dir: PathBuf) -> Self {
-        Assembler { dir, partial: HashMap::new(), counter: 0, written: Vec::new() }
+        Assembler {
+            dir,
+            partial: HashMap::new(),
+            counter: 0,
+            written: Vec::new(),
+        }
     }
 
     /// Feed one chunk. Chunks of a blob arrive in order (they travel on TCP).
@@ -120,10 +153,21 @@ impl Assembler {
         }
         let key = (from, id);
         if idx == 0 {
-            self.partial.insert(key, Partial { total, next: 0, data: Vec::new() });
+            self.partial.insert(
+                key,
+                Partial {
+                    total,
+                    next: 0,
+                    data: Vec::new(),
+                },
+            );
         }
-        let part = self.partial.get_mut(&key).ok_or_else(|| anyhow!("chunk for an unknown transfer"))?;
-        if idx != part.next || total != part.total || part.data.len() + chunk.len() > MAX_COMPRESSED {
+        let part = self
+            .partial
+            .get_mut(&key)
+            .ok_or_else(|| anyhow!("chunk for an unknown transfer"))?;
+        if idx != part.next || total != part.total || part.data.len() + chunk.len() > MAX_COMPRESSED
+        {
             self.partial.remove(&key);
             bail!("transfer out of sequence");
         }
@@ -146,7 +190,9 @@ impl Assembler {
             bail!("bad transfer header");
         }
         let mut raw = Vec::with_capacity(header.raw_len as usize);
-        DeflateDecoder::new(&data[4 + header_len..]).take(header.raw_len + 1).read_to_end(&mut raw)?;
+        DeflateDecoder::new(&data[4 + header_len..])
+            .take(header.raw_len + 1)
+            .read_to_end(&mut raw)?;
         if raw.len() as u64 != header.raw_len {
             bail!("transfer has the wrong length");
         }
@@ -157,7 +203,11 @@ impl Assembler {
         let dest = self.dir.join(&file);
         std::fs::rename(&tmp, &dest)?;
         self.written.push(dest);
-        Ok(Some(Finished { kind: header.kind, file, meta: header.meta }))
+        Ok(Some(Finished {
+            kind: header.kind,
+            file,
+            meta: header.meta,
+        }))
     }
 
     pub fn forget(&mut self, from: u8) {

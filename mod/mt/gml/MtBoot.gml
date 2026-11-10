@@ -9,7 +9,7 @@
 // and the companion does all of the networking.
 
 #macro MT_MOD "mistria_together"
-#macro MT_VERSION "0.2.0"
+#macro MT_VERSION "0.3.0"
 // Bumped whenever game-to-game messages change shape. Peers with a different
 // value are refused by the companion before they ever reach the game.
 #macro MT_PROTO 1
@@ -101,6 +101,9 @@ function mt_config() {
         password: is_string(_password) ? _password : "",
         // The address typed into the Join box last time.
         last_address: is_string(_last) ? _last : "",
+        // Personal connection profiles. The label is user-entered, not a
+        // verified Steam identity; endpoint resolution is delegated to Rust.
+        friends: is_array(_src[$ "friends"]) ? _src.friends : [],
         // How far behind real time other players are drawn, in frames. Higher
         // is smoother on bad connections, lower is more immediate.
         smoothing_frames: mmapi_config_number(_src, "smoothing_frames", 7, 2, 30),

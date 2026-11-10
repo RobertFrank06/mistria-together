@@ -73,9 +73,17 @@ pub async fn listen(published: SharedPublished, own_id: String) {
 }
 
 /// Announce a hosted session until the returned task is aborted.
-pub fn announce(id: String, name: String, port: u16, locked: bool, players: Arc<AtomicU32>) -> tokio::task::JoinHandle<()> {
+pub fn announce(
+    id: String,
+    name: String,
+    port: u16,
+    locked: bool,
+    players: Arc<AtomicU32>,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        let Ok(socket) = reusable_socket(0) else { return };
+        let Ok(socket) = reusable_socket(0) else {
+            return;
+        };
         let mut tick = tokio::time::interval(Duration::from_secs(1));
         loop {
             tick.tick().await;
@@ -87,10 +95,16 @@ pub fn announce(id: String, name: String, port: u16, locked: bool, players: Arc<
                 players: players.load(Ordering::Relaxed),
                 locked,
             };
-            let Ok(bytes) = serde_json::to_vec(&beacon) else { continue };
-            let _ = socket.send_to(&bytes, (Ipv4Addr::BROADCAST, BEACON_PORT)).await;
+            let Ok(bytes) = serde_json::to_vec(&beacon) else {
+                continue;
+            };
+            let _ = socket
+                .send_to(&bytes, (Ipv4Addr::BROADCAST, BEACON_PORT))
+                .await;
             // Also reach other companions on this very machine.
-            let _ = socket.send_to(&bytes, (Ipv4Addr::LOCALHOST, BEACON_PORT)).await;
+            let _ = socket
+                .send_to(&bytes, (Ipv4Addr::LOCALHOST, BEACON_PORT))
+                .await;
         }
     })
 }

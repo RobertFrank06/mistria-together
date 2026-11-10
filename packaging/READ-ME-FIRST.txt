@@ -10,7 +10,9 @@ Everyone who plays does this once:
         Windows:  double-click  Install.bat
         Linux / macOS:  ./install.sh
      It puts a small helper in the background (no window; it starts by
-     itself from now on) and copies the mod into your MOMI mods folder.
+     itself from now on) and copies the extracted mt folder into your MOMI
+     mods folder. MOMI needs manifest.toml directly inside that folder;
+     it cannot install the convenience ZIP by itself.
 
   3. Open MOMI and press Install. Remove any other multiplayer mod first.
 

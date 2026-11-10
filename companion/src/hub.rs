@@ -52,11 +52,18 @@ pub struct Hub {
 impl Hub {
     /// Bind TCP and UDP on the same port and start serving.
     pub async fn start(bind: SocketAddr, cfg: HubConfig) -> Result<Hub> {
-        let listener = TcpListener::bind(bind).await.map_err(|e| anyhow!("cannot listen on {bind}: {e}"))?;
+        let listener = TcpListener::bind(bind)
+            .await
+            .map_err(|e| anyhow!("cannot listen on {bind}: {e}"))?;
         let tcp_addr = listener.local_addr()?;
-        let udp = UdpSocket::bind(tcp_addr).await.map_err(|e| anyhow!("cannot bind UDP {tcp_addr}: {e}"))?;
+        let udp = UdpSocket::bind(tcp_addr)
+            .await
+            .map_err(|e| anyhow!("cannot bind UDP {tcp_addr}: {e}"))?;
         let udp = Arc::new(udp);
-        let state: Shared = Arc::new(Mutex::new(State { next_id: 1, ..Default::default() }));
+        let state: Shared = Arc::new(Mutex::new(State {
+            next_id: 1,
+            ..Default::default()
+        }));
         let cfg = Arc::new(cfg);
 
         let udp_task = tokio::spawn(udp_loop(udp.clone(), state.clone()));
@@ -67,7 +74,13 @@ impl Hub {
                 match listener.accept().await {
                     Ok((stream, addr)) => {
                         let _ = stream.set_nodelay(true);
-                        tokio::spawn(serve(stream, addr, accept_state.clone(), udp.clone(), cfg.clone()));
+                        tokio::spawn(serve(
+                            stream,
+                            addr,
+                            accept_state.clone(),
+                            udp.clone(),
+                            cfg.clone(),
+                        ));
                     }
                     Err(e) => {
                         log!("hub: accept failed: {e}");
@@ -76,7 +89,11 @@ impl Hub {
                 }
             }
         });
-        Ok(Hub { tcp_addr, tasks: vec![accept_task, udp_task, stats_task], state })
+        Ok(Hub {
+            tcp_addr,
+            tasks: vec![accept_task, udp_task, stats_task],
+            state,
+        })
     }
 
     pub fn stop(&self) {
@@ -101,7 +118,12 @@ fn random_token() -> u64 {
     use std::collections::hash_map::RandomState;
     use std::hash::{BuildHasher, Hasher};
     let mut h = RandomState::new().build_hasher();
-    h.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+    h.write_u128(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0),
+    );
     h.finish() | 1
 }
 
@@ -120,7 +142,12 @@ fn push(state: &mut State, id: u8, bytes: &Arc<Vec<u8>>) {
 
 fn targets(state: &State, from: u8, to: u8) -> Vec<u8> {
     match to {
-        TO_ALL => state.peers.keys().copied().filter(|&id| id != from).collect(),
+        TO_ALL => state
+            .peers
+            .keys()
+            .copied()
+            .filter(|&id| id != from)
+            .collect(),
         TO_HOST => state.host.into_iter().filter(|&id| id != from).collect(),
         id if id != from && state.peers.contains_key(&id) => vec![id],
         _ => Vec::new(),
@@ -133,15 +160,27 @@ fn relay_unreliable(state: &mut State, udp: &UdpSocket, from: u8, to: u8, payloa
     let now = Instant::now();
     let mut tcp_fallback: Option<Arc<Vec<u8>>> = None;
     for id in targets(state, from, to) {
-        let Some(peer) = state.peers.get(&id) else { continue };
+        let Some(peer) = state.peers.get(&id) else {
+            continue;
+        };
         match peer.udp_addr {
-            Some(addr) if now.duration_since(peer.udp_seen) < UDP_FRESH && payload.len() <= MAX_DATAGRAM_PAYLOAD => {
+            Some(addr)
+                if now.duration_since(peer.udp_seen) < UDP_FRESH
+                    && payload.len() <= MAX_DATAGRAM_PAYLOAD =>
+            {
                 let pkt = udp_packet(peer.udp_token, UDP_RELAY, Some(from), payload);
                 let _ = udp.try_send_to(&pkt, addr);
             }
             _ => {
                 let bytes = tcp_fallback.get_or_insert_with(|| {
-                    Arc::new(Frame::Relay { peer: from, kind: RelayKind::Unreliable, payload: payload.to_vec() }.encode())
+                    Arc::new(
+                        Frame::Relay {
+                            peer: from,
+                            kind: RelayKind::Unreliable,
+                            payload: payload.to_vec(),
+                        }
+                        .encode(),
+                    )
                 });
                 let bytes = bytes.clone();
                 push(state, id, &bytes);
@@ -161,10 +200,16 @@ async fn udp_loop(udp: Arc<UdpSocket>, state: Shared) {
                 continue;
             }
         };
-        let Some(pkt) = parse_udp(&buf[..n]) else { continue };
+        let Some(pkt) = parse_udp(&buf[..n]) else {
+            continue;
+        };
         let mut st = state.lock().unwrap();
-        let Some(&id) = st.tokens.get(&pkt.token) else { continue };
-        let Some(peer) = st.peers.get_mut(&id) else { continue };
+        let Some(&id) = st.tokens.get(&pkt.token) else {
+            continue;
+        };
+        let Some(peer) = st.peers.get_mut(&id) else {
+            continue;
+        };
         peer.udp_addr = Some(addr);
         peer.udp_seen = Instant::now();
         match pkt.kind {
@@ -189,7 +234,11 @@ async fn stats_loop(state: Shared) {
         if st.peers.len() < 2 {
             continue;
         }
-        let pings: Vec<PeerPing> = st.peers.iter().map(|(&id, p)| PeerPing { id, ms: p.rtt_ms }).collect();
+        let pings: Vec<PeerPing> = st
+            .peers
+            .iter()
+            .map(|(&id, p)| PeerPing { id, ms: p.rtt_ms })
+            .collect();
         let bytes = Arc::new(Frame::Stats { pings }.encode());
         let ids: Vec<u8> = st.peers.keys().copied().collect();
         for id in ids {
@@ -198,7 +247,13 @@ async fn stats_loop(state: Shared) {
     }
 }
 
-async fn serve(stream: TcpStream, addr: SocketAddr, state: Shared, udp: Arc<UdpSocket>, cfg: Arc<HubConfig>) {
+async fn serve(
+    stream: TcpStream,
+    addr: SocketAddr,
+    state: Shared,
+    udp: Arc<UdpSocket>,
+    cfg: Arc<HubConfig>,
+) {
     let (mut rd, mut wr) = stream.into_split();
     let hello = match tokio::time::timeout(Duration::from_secs(8), read_frame(&mut rd)).await {
         Ok(Ok(Frame::Hello(h))) => h,
@@ -211,12 +266,25 @@ async fn serve(stream: TcpStream, addr: SocketAddr, state: Shared, udp: Arc<UdpS
         Ok(v) => v,
         Err(e) => {
             log!("hub: refused {} from {addr}: {e}", hello.name);
-            let _ = write_frame(&mut wr, &Frame::Bye { reason: e.to_string() }).await;
+            let _ = write_frame(
+                &mut wr,
+                &Frame::Bye {
+                    reason: e.to_string(),
+                },
+            )
+            .await;
             return;
         }
     };
-    log!("hub: {} joined as player {id} ({:?}) from {addr}", hello.name, hello.role);
-    if write_frame(&mut wr, &Frame::Welcome(welcome)).await.is_err() {
+    log!(
+        "hub: {} joined as player {id} ({:?}) from {addr}",
+        hello.name,
+        hello.role
+    );
+    if write_frame(&mut wr, &Frame::Welcome(welcome))
+        .await
+        .is_err()
+    {
         remove_peer(&state, id, "connection lost");
         return;
     }
@@ -242,11 +310,26 @@ async fn serve(stream: TcpStream, addr: SocketAddr, state: Shared, udp: Arc<UdpS
             break;
         }
         match frame {
-            Frame::Relay { peer: to, kind: RelayKind::Unreliable, payload } => {
+            Frame::Relay {
+                peer: to,
+                kind: RelayKind::Unreliable,
+                payload,
+            } => {
                 relay_unreliable(&mut st, &udp, id, to, &payload);
             }
-            Frame::Relay { peer: to, kind, payload } => {
-                let bytes = Arc::new(Frame::Relay { peer: id, kind, payload }.encode());
+            Frame::Relay {
+                peer: to,
+                kind,
+                payload,
+            } => {
+                let bytes = Arc::new(
+                    Frame::Relay {
+                        peer: id,
+                        kind,
+                        payload,
+                    }
+                    .encode(),
+                );
                 for target in targets(&st, id, to) {
                     push(&mut st, target, &bytes);
                 }
@@ -267,7 +350,12 @@ async fn serve(stream: TcpStream, addr: SocketAddr, state: Shared, udp: Arc<UdpS
     let _ = tokio::time::timeout(Duration::from_secs(2), writer).await;
 }
 
-fn admit(state: &Shared, cfg: &HubConfig, hello: &Hello, tx: mpsc::Sender<Arc<Vec<u8>>>) -> Result<(u8, Welcome)> {
+fn admit(
+    state: &Shared,
+    cfg: &HubConfig,
+    hello: &Hello,
+    tx: mpsc::Sender<Arc<Vec<u8>>>,
+) -> Result<(u8, Welcome)> {
     if hello.wire != WIRE_VERSION {
         bail!("companion version mismatch (theirs speaks protocol {}, this session {WIRE_VERSION}) - update Mistria Together on both sides", hello.wire);
     }
@@ -299,7 +387,10 @@ fn admit(state: &Shared, cfg: &HubConfig, hello: &Hello, tx: mpsc::Sender<Arc<Ve
     }
     if let Some(proto) = st.game_proto {
         if proto != hello.game_proto {
-            bail!("mod version mismatch ({} is on a different version of Mistria Together)", hello.name);
+            bail!(
+                "mod version mismatch ({} is on a different version of Mistria Together)",
+                hello.name
+            );
         }
     }
     if st.peers.len() >= MAX_PEERS {
@@ -319,8 +410,21 @@ fn admit(state: &Shared, cfg: &HubConfig, hello: &Hello, tx: mpsc::Sender<Arc<Ve
     while st.tokens.contains_key(&udp_token) {
         udp_token = udp_token.wrapping_add(2);
     }
-    let roster: Vec<PeerInfo> = st.peers.iter().map(|(&pid, p)| PeerInfo { id: pid, name: p.name.clone() }).collect();
-    let joined = Arc::new(Frame::PeerJoined(PeerInfo { id, name: hello.name.clone() }).encode());
+    let roster: Vec<PeerInfo> = st
+        .peers
+        .iter()
+        .map(|(&pid, p)| PeerInfo {
+            id: pid,
+            name: p.name.clone(),
+        })
+        .collect();
+    let joined = Arc::new(
+        Frame::PeerJoined(PeerInfo {
+            id,
+            name: hello.name.clone(),
+        })
+        .encode(),
+    );
     let others: Vec<u8> = st.peers.keys().copied().collect();
     for other in others {
         push(&mut st, other, &joined);
@@ -328,10 +432,25 @@ fn admit(state: &Shared, cfg: &HubConfig, hello: &Hello, tx: mpsc::Sender<Arc<Ve
     st.tokens.insert(udp_token, id);
     st.peers.insert(
         id,
-        Peer { name: hello.name.clone(), tx, udp_token, udp_addr: None, udp_seen: Instant::now(), rtt_ms: 0 },
+        Peer {
+            name: hello.name.clone(),
+            tx,
+            udp_token,
+            udp_addr: None,
+            udp_seen: Instant::now(),
+            rtt_ms: 0,
+        },
     );
     let host = st.host.unwrap_or(0);
-    Ok((id, Welcome { id, host, udp_token, peers: roster }))
+    Ok((
+        id,
+        Welcome {
+            id,
+            host,
+            udp_token,
+            peers: roster,
+        },
+    ))
 }
 
 fn remove_peer(state: &Shared, id: u8, why: &str) {
@@ -348,7 +467,12 @@ fn remove_peer(state: &Shared, id: u8, why: &str) {
     if st.host == Some(id) {
         // The world lives in the host's game: without it there is no session.
         st.host = None;
-        let bye = Arc::new(Frame::Bye { reason: "the host left".into() }.encode());
+        let bye = Arc::new(
+            Frame::Bye {
+                reason: "the host left".into(),
+            }
+            .encode(),
+        );
         for other in others {
             push(&mut st, other, &bye);
             st.peers.remove(&other);

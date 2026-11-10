@@ -42,7 +42,11 @@ pub struct GameInfo {
 #[derive(Debug)]
 pub enum OutMsg {
     /// A message for other players. `to` is a wire address.
-    Peer { to: u8, unreliable: bool, json: String },
+    Peer {
+        to: u8,
+        unreliable: bool,
+        json: String,
+    },
     /// A request to the companion itself (file transfers).
     Link(serde_json::Value),
 }
@@ -93,8 +97,15 @@ pub type SharedPublished = Arc<std::sync::Mutex<Published>>;
 #[derive(Debug)]
 pub enum ToGame {
     /// `from` is a peer id, or -1 for messages produced by the companion.
-    Msg { from: i32, unreliable: bool, json: String },
-    Status { state: String, detail: String },
+    Msg {
+        from: i32,
+        unreliable: bool,
+        json: String,
+    },
+    Status {
+        state: String,
+        detail: String,
+    },
 }
 
 #[derive(Deserialize)]
@@ -149,9 +160,9 @@ struct Candidate {
 
 struct Paired {
     info: GameInfo,
-    out_seq: u64,     // next g_ batch to read
-    in_seq: u64,      // next l_ batch to write
-    in_oldest: u64,   // oldest l_ batch the game may not have read yet
+    out_seq: u64,   // next g_ batch to read
+    in_seq: u64,    // next l_ batch to write
+    in_oldest: u64, // oldest l_ batch the game may not have read yet
 }
 
 pub struct Bridge {
@@ -229,7 +240,14 @@ impl Bridge {
         Bridge {
             candidates: ipc_dirs
                 .into_iter()
-                .map(|dir| Candidate { dir, last_hb: -1.0, last_sid: String::new(), last_change: None, seen: false, info: None })
+                .map(|dir| Candidate {
+                    dir,
+                    last_hb: -1.0,
+                    last_sid: String::new(),
+                    last_change: None,
+                    seen: false,
+                    info: None,
+                })
                 .collect(),
             epoch: new_epoch(),
             hb: 0,
@@ -272,7 +290,8 @@ impl Bridge {
             }
             // Only talk to the disk while a game is around: this program may
             // sit in the background for days without one.
-            let active = self.paired.is_some() || self.active_until.map(|t| now < t).unwrap_or(false);
+            let active =
+                self.paired.is_some() || self.active_until.map(|t| now < t).unwrap_or(false);
             if active {
                 if now.duration_since(last_link) >= LINK_INTERVAL {
                     last_link = now;
@@ -281,7 +300,11 @@ impl Bridge {
             } else if self.link_written {
                 self.remove_link();
             }
-            std::thread::sleep(if self.paired.is_some() { LOOP_SLEEP } else { IDLE_SLEEP });
+            std::thread::sleep(if self.paired.is_some() {
+                LOOP_SLEEP
+            } else {
+                IDLE_SLEEP
+            });
         }
         // Tell the game we are gone instead of letting the heartbeat time out.
         self.remove_link();
@@ -299,7 +322,9 @@ impl Bridge {
     fn read_control(&mut self, first: bool) {
         for (i, c) in self.candidates.iter().enumerate() {
             let path = c.dir.join("control.json");
-            let Some(bytes) = read_with_retry(&path) else { continue };
+            let Some(bytes) = read_with_retry(&path) else {
+                continue;
+            };
             let text = String::from_utf8_lossy(&bytes).into_owned();
             if self.control_seen[i].as_deref() == Some(text.as_str()) {
                 continue;
@@ -323,11 +348,14 @@ impl Bridge {
     }
 
     fn clean_dir(dir: &Path) {
-        let Ok(entries) = fs::read_dir(dir) else { return };
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
         for entry in entries.flatten() {
             let name = entry.file_name();
             let name = name.to_string_lossy();
-            let stale = (name.starts_with("g_") || name.starts_with("l_")) && name.ends_with(".json")
+            let stale = (name.starts_with("g_") || name.starts_with("l_"))
+                && name.ends_with(".json")
                 || name.starts_with("blob_in_")
                 || name.starts_with("blob_out_")
                 || name == "link.tmp";
@@ -340,7 +368,8 @@ impl Bridge {
     fn scan(&mut self) {
         let now = Instant::now();
         for c in &mut self.candidates {
-            let parsed = read_with_retry(&c.dir.join("game.json")).and_then(|b| serde_json::from_slice::<GameFile>(&b).ok());
+            let parsed = read_with_retry(&c.dir.join("game.json"))
+                .and_then(|b| serde_json::from_slice::<GameFile>(&b).ok());
             let Some(g) = parsed else {
                 continue;
             };
@@ -355,7 +384,10 @@ impl Bridge {
                 c.last_sid = g.sid.clone();
             }
             c.seen = true;
-            let alive = c.last_change.map(|t| now.duration_since(t) < GAME_TIMEOUT).unwrap_or(false);
+            let alive = c
+                .last_change
+                .map(|t| now.duration_since(t) < GAME_TIMEOUT)
+                .unwrap_or(false);
             c.info = alive.then(|| GameInfo {
                 dir: c.dir.clone(),
                 sid: g.sid,
@@ -382,10 +414,23 @@ impl Bridge {
                 }
             }
             (_, Some(info)) => {
-                log!("game found ({}) in {}", if info.name.is_empty() { "on the title screen" } else { &info.name }, info.dir.display());
+                log!(
+                    "game found ({}) in {}",
+                    if info.name.is_empty() {
+                        "on the title screen"
+                    } else {
+                        &info.name
+                    },
+                    info.dir.display()
+                );
                 Self::clean_dir(&info.dir);
                 self.pending.clear();
-                self.paired = Some(Paired { info: info.clone(), out_seq: 0, in_seq: 0, in_oldest: 0 });
+                self.paired = Some(Paired {
+                    info: info.clone(),
+                    out_seq: 0,
+                    in_seq: 0,
+                    in_oldest: 0,
+                });
                 let _ = self.to_net.send(ToNet::Game(Some(info)));
             }
             (Some(_), None) => {
@@ -401,8 +446,13 @@ impl Bridge {
     fn read_outbound(&mut self) {
         let Some(p) = &mut self.paired else { return };
         for _ in 0..32 {
-            let path = p.info.dir.join(format!("g_{}_{}_{}.json", p.info.sid, self.epoch, p.out_seq));
-            let Some(bytes) = read_with_retry(&path) else { break };
+            let path = p.info.dir.join(format!(
+                "g_{}_{}_{}.json",
+                p.info.sid, self.epoch, p.out_seq
+            ));
+            let Some(bytes) = read_with_retry(&path) else {
+                break;
+            };
             let _ = fs::remove_file(&path);
             p.out_seq += 1;
             let batch: OutBatch = match serde_json::from_slice(&bytes) {
@@ -414,13 +464,25 @@ impl Bridge {
             };
             for entry in batch.m {
                 let msg = match entry.to {
-                    -1 => OutMsg::Peer { to: TO_ALL, unreliable: entry.u == 1, json: entry.d.get().to_owned() },
-                    -2 => OutMsg::Peer { to: TO_HOST, unreliable: entry.u == 1, json: entry.d.get().to_owned() },
+                    -1 => OutMsg::Peer {
+                        to: TO_ALL,
+                        unreliable: entry.u == 1,
+                        json: entry.d.get().to_owned(),
+                    },
+                    -2 => OutMsg::Peer {
+                        to: TO_HOST,
+                        unreliable: entry.u == 1,
+                        json: entry.d.get().to_owned(),
+                    },
                     -3 => match serde_json::from_str(entry.d.get()) {
                         Ok(v) => OutMsg::Link(v),
                         Err(_) => continue,
                     },
-                    id @ 1..=253 => OutMsg::Peer { to: id as u8, unreliable: entry.u == 1, json: entry.d.get().to_owned() },
+                    id @ 1..=253 => OutMsg::Peer {
+                        to: id as u8,
+                        unreliable: entry.u == 1,
+                        json: entry.d.get().to_owned(),
+                    },
                     _ => continue,
                 };
                 let _ = self.to_net.send(ToNet::Out(msg));
@@ -432,7 +494,11 @@ impl Bridge {
     fn drain_from_net(&mut self) -> bool {
         loop {
             match self.from_net.try_recv() {
-                Ok(ToGame::Msg { from, unreliable, json }) => {
+                Ok(ToGame::Msg {
+                    from,
+                    unreliable,
+                    json,
+                }) => {
                     if self.paired.is_some() {
                         self.pending.push((from, unreliable, json));
                     }
@@ -473,7 +539,8 @@ impl Bridge {
             self.pending = kept;
             return;
         }
-        let mut text = String::with_capacity(64 + self.pending.iter().map(|m| m.2.len() + 16).sum::<usize>());
+        let mut text =
+            String::with_capacity(64 + self.pending.iter().map(|m| m.2.len() + 16).sum::<usize>());
         text.push_str("{\"m\":[");
         for (i, (from, _, json)) in self.pending.iter().enumerate() {
             if i > 0 {
@@ -514,10 +581,16 @@ impl Bridge {
         for c in &self.candidates {
             // Only where the mod has been (or the game data dir exists): never
             // create save directories for a game that is not installed here.
-            if c.dir.exists() || c.dir.parent().and_then(|p| p.parent()).and_then(|p| p.parent()).map(|p| p.exists()).unwrap_or(false) {
-                if fs::create_dir_all(&c.dir).is_ok() {
-                    let _ = write_atomic(&c.dir, "link.json", body.as_bytes());
-                }
+            if (c.dir.exists()
+                || c.dir
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .and_then(|p| p.parent())
+                    .map(|p| p.exists())
+                    .unwrap_or(false))
+                && fs::create_dir_all(&c.dir).is_ok()
+            {
+                let _ = write_atomic(&c.dir, "link.json", body.as_bytes());
             }
         }
     }

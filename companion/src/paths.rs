@@ -8,7 +8,9 @@ const GAME_DIR: &str = "FieldsOfMistria";
 const STEAM_APP_ID: &str = "2142790";
 
 fn env_path(name: &str) -> Option<PathBuf> {
-    std::env::var_os(name).filter(|v| !v.is_empty()).map(PathBuf::from)
+    std::env::var_os(name)
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
 }
 
 /// Every place the game might keep its data on this machine, most likely
@@ -33,7 +35,11 @@ pub fn data_dir_candidates() -> Vec<PathBuf> {
         if let Some(home) = &home {
             roots.push(home.join(".local/share").join(GAME_DIR));
             // Windows build under Proton.
-            for steam in [".local/share/Steam", ".steam/steam", ".var/app/com.valvesoftware.Steam/.local/share/Steam"] {
+            for steam in [
+                ".local/share/Steam",
+                ".steam/steam",
+                ".var/app/com.valvesoftware.Steam/.local/share/Steam",
+            ] {
                 roots.push(
                     home.join(steam)
                         .join("steamapps/compatdata")
@@ -77,7 +83,10 @@ pub fn ipc_dir(data_dir: &Path, instance: Option<&str>) -> PathBuf {
 pub fn ipc_dirs(explicit: Option<&Path>, instance: Option<&str>) -> Vec<PathBuf> {
     match explicit {
         Some(dir) => vec![ipc_dir(dir, instance)],
-        None => data_dir_candidates().iter().map(|d| ipc_dir(d, instance)).collect(),
+        None => data_dir_candidates()
+            .iter()
+            .map(|d| ipc_dir(d, instance))
+            .collect(),
     }
 }
 

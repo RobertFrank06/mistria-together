@@ -231,15 +231,24 @@ function mt_sync_drop_pending() {
 function mt_sync_backup_save() {
     var _s = mt_sync_state();
     if (_s.backed_up) { return; }
-    _s.backed_up = true;
     try {
         var _path = Game.last_serde_path;
         if (!is_string(_path) || !file_exists(_path)) { return; }
         var _dir = mmapi_config_dir(MT_MOD) + "/backups";
         if (!directory_exists(_dir)) { directory_create(_dir); }
         var _dest = _dir + "/" + filename_name(_path);
-        if (file_exists(_dest)) { file_delete(_dest); }
-        file_copy(_path, _dest);
+        // This backup represents the guest's original farm. It must survive
+        // later reconnects, when the active save already contains the host's.
+        if (file_exists(_dest)) {
+            _s.backed_up = true;
+            mt_log("preserved existing save backup " + _dest);
+            return;
+        }
+        if (!file_copy(_path, _dest) || !file_exists(_dest)) {
+            mt_warn("could not verify save backup at " + _dest);
+            return;
+        }
+        _s.backed_up = true;
         mt_log("backed up " + _path + " before adopting the host's world");
     } catch (_e) {
         mt_warn("could not back up the save: " + string(_e));

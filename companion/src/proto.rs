@@ -94,15 +94,30 @@ pub enum Frame {
     Hello(Hello),
     Welcome(Welcome),
     /// Sent before the hub closes a connection, with a reason for the player.
-    Bye { reason: String },
+    Bye {
+        reason: String,
+    },
     PeerJoined(PeerInfo),
-    PeerLeft { id: u8 },
+    PeerLeft {
+        id: u8,
+    },
     /// `t` is echoed back; `rtt_ms` is the sender's last measured round trip.
-    Ping { t: u64, rtt_ms: u32 },
-    Pong { t: u64 },
-    Stats { pings: Vec<PeerPing> },
+    Ping {
+        t: u64,
+        rtt_ms: u32,
+    },
+    Pong {
+        t: u64,
+    },
+    Stats {
+        pings: Vec<PeerPing>,
+    },
     /// Client to hub: `peer` is the destination. Hub to client: the sender.
-    Relay { peer: u8, kind: RelayKind, payload: Vec<u8> },
+    Relay {
+        peer: u8,
+        kind: RelayKind,
+        payload: Vec<u8>,
+    },
 }
 
 const K_HELLO: u8 = 1;
@@ -145,13 +160,33 @@ impl Frame {
         let mut out = match self {
             Frame::Hello(h) => json(K_HELLO, h),
             Frame::Welcome(w) => json(K_WELCOME, w),
-            Frame::Bye { reason } => json(K_BYE, &ByeBody { reason: reason.clone() }),
+            Frame::Bye { reason } => json(
+                K_BYE,
+                &ByeBody {
+                    reason: reason.clone(),
+                },
+            ),
             Frame::PeerJoined(p) => json(K_JOINED, p),
             Frame::PeerLeft { id } => json(K_LEFT, &LeftBody { id: *id }),
-            Frame::Ping { t, rtt_ms } => json(K_PING, &PingBody { t: *t, rtt_ms: *rtt_ms }),
+            Frame::Ping { t, rtt_ms } => json(
+                K_PING,
+                &PingBody {
+                    t: *t,
+                    rtt_ms: *rtt_ms,
+                },
+            ),
             Frame::Pong { t } => json(K_PONG, &PingBody { t: *t, rtt_ms: 0 }),
-            Frame::Stats { pings } => json(K_STATS, &StatsBody { pings: pings.clone() }),
-            Frame::Relay { peer, kind, payload } => {
+            Frame::Stats { pings } => json(
+                K_STATS,
+                &StatsBody {
+                    pings: pings.clone(),
+                },
+            ),
+            Frame::Relay {
+                peer,
+                kind,
+                payload,
+            } => {
                 let mut out = Vec::with_capacity(7 + payload.len());
                 out.extend_from_slice(&[0, 0, 0, 0, K_RELAY, *peer, *kind as u8]);
                 out.extend_from_slice(payload);
@@ -169,20 +204,35 @@ impl Frame {
         Ok(match kind {
             K_HELLO => Frame::Hello(serde_json::from_slice(body)?),
             K_WELCOME => Frame::Welcome(serde_json::from_slice(body)?),
-            K_BYE => Frame::Bye { reason: serde_json::from_slice::<ByeBody>(body)?.reason },
+            K_BYE => Frame::Bye {
+                reason: serde_json::from_slice::<ByeBody>(body)?.reason,
+            },
             K_JOINED => Frame::PeerJoined(serde_json::from_slice(body)?),
-            K_LEFT => Frame::PeerLeft { id: serde_json::from_slice::<LeftBody>(body)?.id },
+            K_LEFT => Frame::PeerLeft {
+                id: serde_json::from_slice::<LeftBody>(body)?.id,
+            },
             K_PING => {
                 let b: PingBody = serde_json::from_slice(body)?;
-                Frame::Ping { t: b.t, rtt_ms: b.rtt_ms }
+                Frame::Ping {
+                    t: b.t,
+                    rtt_ms: b.rtt_ms,
+                }
             }
-            K_PONG => Frame::Pong { t: serde_json::from_slice::<PingBody>(body)?.t },
-            K_STATS => Frame::Stats { pings: serde_json::from_slice::<StatsBody>(body)?.pings },
+            K_PONG => Frame::Pong {
+                t: serde_json::from_slice::<PingBody>(body)?.t,
+            },
+            K_STATS => Frame::Stats {
+                pings: serde_json::from_slice::<StatsBody>(body)?.pings,
+            },
             K_RELAY => {
                 if body.len() < 2 {
                     bail!("short relay frame");
                 }
-                Frame::Relay { peer: body[0], kind: RelayKind::from_u8(body[1])?, payload: body[2..].to_vec() }
+                Frame::Relay {
+                    peer: body[0],
+                    kind: RelayKind::from_u8(body[1])?,
+                    payload: body[2..].to_vec(),
+                }
             }
             other => bail!("unknown frame kind {other}"),
         })
@@ -237,7 +287,11 @@ pub fn parse_udp(buf: &[u8]) -> Option<UdpPacket<'_>> {
         return None;
     }
     let token = u64::from_be_bytes(buf[4..12].try_into().ok()?);
-    Some(UdpPacket { token, kind: buf[12], body: &buf[13..] })
+    Some(UdpPacket {
+        token,
+        kind: buf[12],
+        body: &buf[13..],
+    })
 }
 
 #[cfg(test)]
@@ -256,12 +310,28 @@ mod tests {
                 password: Some("pw".into()),
                 host_key: None,
             }),
-            Frame::Welcome(Welcome { id: 2, host: 1, udp_token: 42, peers: vec![PeerInfo { id: 1, name: "H".into() }] }),
-            Frame::Bye { reason: "host left".into() },
+            Frame::Welcome(Welcome {
+                id: 2,
+                host: 1,
+                udp_token: 42,
+                peers: vec![PeerInfo {
+                    id: 1,
+                    name: "H".into(),
+                }],
+            }),
+            Frame::Bye {
+                reason: "host left".into(),
+            },
             Frame::PeerLeft { id: 3 },
             Frame::Ping { t: 99, rtt_ms: 12 },
-            Frame::Stats { pings: vec![PeerPing { id: 1, ms: 20 }] },
-            Frame::Relay { peer: TO_ALL, kind: RelayKind::Blob, payload: vec![1, 2, 3, 0, 255] },
+            Frame::Stats {
+                pings: vec![PeerPing { id: 1, ms: 20 }],
+            },
+            Frame::Relay {
+                peer: TO_ALL,
+                kind: RelayKind::Blob,
+                payload: vec![1, 2, 3, 0, 255],
+            },
         ];
         for f in frames {
             let enc = f.encode();

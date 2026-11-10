@@ -53,6 +53,144 @@ function mt_menu_notice(_title, _text) {
     _popup.spawn();
 }
 
+function mt_menu_save_config() {
+    mmapi_config_write(MT_MOD, MT_CONFIG_VERSION, mt_config());
+}
+
+function mt_menu_friends() {
+    var _cfg = mt_config();
+    var _friends = _cfg.friends;
+    var _popup = popup_creator(mt_menu_text("Friends"), mt_menu_text(array_length(_friends) == 0
+        ? "Save a friend's name and network address for quick joining. Names are labels you choose."
+        : "Browse saved friends by name. Network addresses stay hidden."));
+    if (array_length(_friends) > 0) {
+        _popup.create_button(mt_menu_text("Browse Friends"), mt_menu_friend_browse, [0]);
+        _popup.create_button(mt_menu_text("Add Friend"), mt_menu_add_friend);
+    } else {
+        _popup.create_button(mt_menu_text("Add Friend"), mt_menu_add_friend);
+        _popup.create_button(mt_menu_text("Close"));
+    }
+    _popup.spawn();
+}
+
+function mt_menu_friend_browse(_index) {
+    var _friends = mt_config().friends;
+    if (array_length(_friends) == 0) { mt_menu_friends(); return; }
+    _index = _index mod array_length(_friends);
+    var _f = _friends[_index];
+    var _popup = popup_creator(mt_menu_text("Saved Friends"), mt_menu_text(_f.name + "\nChoose this friend to join or remove them."));
+    _popup.create_button(mt_menu_text("Next"), mt_menu_friend_browse, [_index + 1]);
+    _popup.create_button(mt_menu_text("Choose"), mt_menu_friend_selected, [_index]);
+    _popup.spawn();
+}
+
+function mt_menu_add_friend(_unused = 0) {
+    text_input_popup(mt_menu_text("Friend's name"), "", 32, mt_menu_friend_name_entered);
+}
+
+function mt_menu_friend_name_entered(_name) {
+    _name = string_trim(string(_name));
+    if (_name == "" || string_length(_name) > 32) {
+        mt_menu_notice("Friends", "Enter a name up to 32 characters long.");
+        return;
+    }
+    __mt_rt().pending_friend_name = _name;
+    text_input_popup(mt_menu_text("Host name or address"), "", 253, mt_menu_friend_address_entered);
+}
+
+function mt_menu_friend_address_entered(_address, _name) {
+    _name = __mt_rt().pending_friend_name;
+    __mt_rt().pending_friend_name = undefined;
+    _name = string_trim(string(_name));
+    _address = string_trim(string(_address));
+    var _friends = mt_config().friends;
+    if (_address == "" || string_length(_address) > 253) {
+        mt_menu_notice("Friends", "Enter a hostname or IP address up to 253 characters long.");
+        return;
+    }
+    for (var _i = 0; _i < array_length(_friends); _i++) {
+        var _f = _friends[_i];
+        if (is_struct(_f) && string_lower(_f.name) == string_lower(_name)) {
+            mt_menu_notice("Friends", "A friend with that name is already saved.");
+            return;
+        }
+    }
+    array_push(_friends, { name: _name, address: _address });
+    mt_menu_save_config();
+    mt_menu_friends();
+}
+
+function mt_menu_friend_selected(_index) {
+    var _friends = mt_config().friends;
+    if (_index < 0 || _index >= array_length(_friends)) { return; }
+    var _f = _friends[_index];
+    var _popup = popup_creator(mt_menu_text(_f.name), mt_menu_text("Connect to this saved friend?"));
+    _popup.create_button(mt_menu_text("Join"), mt_menu_friend_join, [_index]);
+    _popup.create_button(mt_menu_text("Remove"), mt_menu_friend_remove, [_index]);
+    _popup.spawn();
+}
+
+function mt_menu_friend_join(_index) {
+    var _friends = mt_config().friends;
+    if (_index < 0 || _index >= array_length(_friends)) { return; }
+    var _f = _friends[_index];
+    mt_menu_set("join", _f.address);
+    if (!mt_in_world()) { mt_menu_notice("Multiplayer", "Joining " + _f.name + " starts when you load a save."); }
+}
+
+function mt_menu_friend_remove(_index) {
+    var _friends = mt_config().friends;
+    if (_index < 0 || _index >= array_length(_friends)) { return; }
+    array_delete(_friends, _index, 1);
+    mt_menu_save_config();
+    mt_menu_friends();
+}
+
+function mt_menu_settings(_page = 0) {
+    var _cfg = mt_config();
+    var _desc = _page == 0
+        ? "Local display choices affect only you. The host owns the shared farm, time, weather, upgrades and decor. Inventory, money, skills, relationships and story remain personal."
+        : "Password changes apply to your next session. The host owns shared-farm settings.";
+    var _popup = popup_creator(mt_menu_text("Multiplayer Settings"), mt_menu_text(_desc));
+    if (_page == 0) {
+        _popup.create_button(mt_menu_text("HUD: " + (_cfg.show_hud ? "On" : "Off")), mt_menu_toggle_hud);
+        _popup.create_button(mt_menu_text("Next"), mt_menu_settings, [1]);
+    } else if (_page == 1) {
+        _popup.create_button(mt_menu_text("Name tags: " + (_cfg.name_tags ? "On" : "Off")), mt_menu_toggle_names);
+        _popup.create_button(mt_menu_text("Next"), mt_menu_settings, [2]);
+    } else {
+        _popup.create_button(mt_menu_text("Smoothing: " + string(_cfg.smoothing_frames)), mt_menu_smoothing);
+        _popup.create_button(mt_menu_text("Password: " + (_cfg.password == "" ? "None" : "Set")), mt_menu_change_password);
+    }
+    _popup.spawn();
+}
+
+function mt_menu_toggle_hud(_unused = 0) {
+    var _cfg = mt_config(); _cfg.show_hud = !_cfg.show_hud;
+    __mt_rt().hud_visible = _cfg.show_hud;
+    mt_menu_save_config(); mt_menu_settings();
+}
+
+function mt_menu_toggle_names(_unused = 0) {
+    var _cfg = mt_config(); _cfg.name_tags = !_cfg.name_tags;
+    mt_menu_save_config(); mt_menu_settings();
+}
+
+function mt_menu_smoothing(_unused = 0) {
+    var _cfg = mt_config();
+    _cfg.smoothing_frames = _cfg.smoothing_frames >= 26 ? 2 : _cfg.smoothing_frames + 6;
+    mt_menu_save_config(); mt_menu_settings();
+}
+
+function mt_menu_change_password(_unused = 0) {
+    text_input_popup(mt_menu_text("Session password (blank for none)"), mt_config().password, 64, mt_menu_password_entered);
+}
+
+function mt_menu_password_entered(_password) {
+    mt_config().password = string(_password);
+    mt_menu_save_config(); mt_menu_settings();
+}
+
 function mt_menu_open() {
     var _rt = __mt_rt();
     if (_rt.dir == undefined) { mt_ipc_init(); }
@@ -67,10 +205,10 @@ function mt_menu_open() {
         _mode = _rt.menu_mode;
     }
     if (_mode == "off") {
-        var _popup = popup_creator(mt_menu_text("Multiplayer"), mt_menu_text("Play together on one farm. One player hosts, the others join."));
+        var _popup = popup_creator(mt_menu_text("Multiplayer"), mt_menu_text("Play together on one farm. Choose a nearby game or open more options."));
         // Escape only closes: neither choice sits on the cancel key.
-        _popup.create_button(mt_menu_text("Join"), mt_menu_on_join, [0], undefined, InputId.SecondaryInteract);
-        _popup.create_button(mt_menu_text("Host"), mt_menu_on_host);
+        _popup.create_button(mt_menu_text("Nearby"), mt_menu_on_join, [0], undefined, InputId.SecondaryInteract);
+        _popup.create_button(mt_menu_text("More"), mt_menu_more);
         _popup.spawn();
         return;
     }
@@ -92,6 +230,20 @@ function mt_menu_open() {
     _status.create_button(mt_menu_text("Close"));
     _status.create_button(mt_menu_text("Disconnect"), mt_menu_on_disconnect);
     _status.spawn();
+}
+
+function mt_menu_more(_unused = 0) {
+    var _popup = popup_creator(mt_menu_text("Multiplayer"), mt_menu_text("Host a farm, or manage saved friends and settings."));
+    _popup.create_button(mt_menu_text("Host"), mt_menu_on_host);
+    _popup.create_button(mt_menu_text("Friends & Settings"), mt_menu_connections);
+    _popup.spawn();
+}
+
+function mt_menu_connections(_unused = 0) {
+    var _popup = popup_creator(mt_menu_text("Connections"), mt_menu_text("Saved host names and local multiplayer options."));
+    _popup.create_button(mt_menu_text("Friends"), mt_menu_friends);
+    _popup.create_button(mt_menu_text("Settings"), mt_menu_settings);
+    _popup.spawn();
 }
 
 function mt_menu_on_host() {
