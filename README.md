@@ -14,21 +14,25 @@ It has two parts:
 
 | | |
 | --- | --- |
-| Seeing each other | Other players appear as their own character: appearance, clothes, animations, tools and held items, name tag. Up to 8 players. |
-| Smooth movement | Movement is sent 20 times a second over UDP and played back on a short, adaptive delay with interpolation, so players glide instead of teleporting. A lost packet is simply replaced by the next one. |
-| One shared farm | Guests load the host's world when they join and again every morning. In between, changes are shared live in both directions: objects placed, removed or damaged (trees, rocks, crops, furniture, chests and their contents), soil tilled and watered. Changes made while you are somewhere else are waiting when you come back. |
-| Shared time | The host's clock, calendar and weather are everyone's. Pausing on the host pauses time for all. |
+| Seeing each other | Other players appear as their own character: appearance, clothes, animations, tools and held items, name tag. Up to 8 players. A player in a story scene is hidden from the others until it ends. |
+| Smooth movement | Movement is sent 20 times a second over UDP and played back on a short, adaptive delay with interpolation. |
+| One shared farm | Guests load the host's world when they join and again every morning. In between, changes are shared live in both directions: objects placed, removed or damaged, soil tilled and watered, chest contents. Items dropped on the ground are visible to everyone in that place, and only one player can pick one up. A chest or the shipping bin is open for one player at a time. |
+| Shared time | One session clock. A menu, shop or scene only freezes your own game; it catches up when it closes. Time-skipping actions (timed recipes, scene time jumps, oversleeping) do not move the session clock. The host can pause the game for everyone from the `F9` menu. The host's day length applies to everybody. |
+| Group day end | Going to bed means "I am ready". The night starts when every online player is ready (in bed, or passed out and waiting at their overnight summary). At 2:00 everyone passes out. A player who leaves stops counting. |
+| Farmhands | Join from the title screen. Your character is a dedicated save on your own computer for that farm, created the first time you join; your solo saves are never touched. |
+| Money | Separate wallets by default: the shipping bin's value is totalled by the host and split evenly between the players online. The host can switch to a shared wallet from the `F9` menu (takes effect the next morning). |
+| Shared progress | Museum donations, the deepest mine floor reached, world unlocks (bridges, repaired places) and animal care are shared. |
+| Mines (experimental) | A host setting shares mine floors: players on the same floor see the same layout and share breakable objects. Monsters and their drops are still each player's own. |
 | Staying connected | The game keeps running when its window loses focus. Guests reconnect by themselves if the host restarts or the connection drops. |
 | Saved friends | Save a display label and hostname/IP once, then reconnect from the in-game Friends list. The label is chosen by you; it is not linked to Steam automatically. |
-| Low overhead | About 0.2-0.4 ms of a 16 ms frame in testing. No full-world scans, no rewriting one shared file. |
 
 ## What does not (yet)
 
-- Each player keeps their own inventory, money, skills, relationships and story progress. Items dropped on the ground are only visible to the player who dropped them (put things in a chest to hand them over).
-- Dungeon floors are generated per player and are not shared; you will not see each other in the mines.
-- Mounts and pets of other players are not drawn. NPCs and farm animals are simulated by each game on its own and can stand in different places for different players.
+- Each player keeps their own inventory, skills, relationships and story progress. Museum set rewards are given to the player who donates.
+- A new farmhand picks a name and gets default looks; there is no character creation screen yet.
+- Mounts and pets of other players are not drawn. NPCs, wild animals and monsters are simulated by each game on its own.
 - Buildings placed during a day reach the other players with the next morning's snapshot.
-- **Stardew-style group sleep is not implemented yet.** Currently the host's day transition drives guests forward; guests cannot mark themselves ready for bed and hold the group until everyone is ready. See [DESIGN.md](DESIGN.md) for the intended co-op model.
+- Items dropped in a place nobody else is in are not arbitrated until someone enters.
 - Traffic is not encrypted. Use a VPN such as Tailscale (recommended anyway, it needs no port forwarding), or a session password on a network you trust.
 
 ## Install
@@ -49,13 +53,13 @@ To undo the companion setup, run `mistria-together uninstall` from a terminal. T
 1. Start Fields of Mistria. The helper runs in the background after setup.
 2. Choose **Multiplayer** in the title menu, below **New Game**, or press `F9` while playing.
 3. The host chooses **Host**, then loads a save. Hosting starts when the farm loads.
-4. Guests choose **Join Multiplayer**, then **Nearby Games**, a saved friend, **Add Friend**, or **Direct Join**. Friend names are labels you choose; save a friend's hostname or IP once to reconnect without retyping it. DNS names work when the network or VPN resolves them.
-5. After choosing a host, the guest loads a local save to begin joining. Guest farmhand saves are not implemented yet, so the guest's selected save is backed up before the host's world is applied.
+4. Guests choose **Join**, then **Nearby Games**, a saved friend, **Add Friend**, or **Direct Join**, all from the title screen. Friend names are labels you choose; save a friend's hostname or IP once to reconnect without retyping it. DNS names work when the network or VPN resolves them.
+5. After choosing a host the game shows the farm, and you continue your farmhand there or create one on your first join. A farmhand save cannot be played without its host: loading it from the normal load menu sends you back to the title.
 6. The in-game status and player list appear in the top-left corner. Press `F9` to hide or show the HUD. **Settings** controls local HUD/name-tag display, movement smoothing, and the session password. Open Multiplayer again to see the session status or disconnect.
 
 For internet play without a VPN or relay, the host must forward TCP and UDP port 7777 on their router and share their public address. The companion's terminal mode prints local and Tailscale addresses; the in-game menu mode runs quietly in the background.
 
-The host owns the shared farm, time, weather, upgrades and decor. A guest's game adopts that world snapshot, while the guest keeps their own inventory, money, skills, relationships and story progress. The guest's original save is backed up under `mod_data/mistria_together/backups/` before the first host snapshot; that first backup is preserved across reconnects. Do not treat the backup as a save merge tool.
+The host owns the shared farm, time, weather, upgrades and decor. A guest's game adopts that world snapshot, while the guest keeps their own inventory, skills, relationships and story progress (and gold, unless the host chose the shared wallet). A first backup of a farmhand save is kept under `mod_data/mistria_together/backups/` and is never overwritten on reconnect.
 
 ### Command line
 
