@@ -171,6 +171,11 @@ class Game:
         raise Failure(f"{self.name}: command {command} timed out after {timeout}s")
 
 
+def sha256(path):
+    import hashlib
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
 class Session:
     def __init__(self, games):
         self.all = games
@@ -188,6 +193,14 @@ class Session:
         expect(True, f"connected: {[g.name for g in self.all]}")
 
 
+def join_farmhand(session, guest, name, addr="127.0.0.1", timeout=90):
+    """Host is hosting; `guest` is at the title: Join as a farmhand."""
+    guest.cmd({"cmd": "title_join", "addr": addr, "name": name})
+    guest.wait(lambda s: s.get("in_world"), "guest in the world", timeout)
+    guest.wait(lambda s: s.get("online") and (s.get("sync") or {}).get("adopted"),
+               "guest online with the host's world", timeout)
+
+
 def run_scenario(module, players, keep=False, timeout=90):
     """Start fresh instances, run one scenario, always clean up. Returns ok."""
     name = module.NAME
@@ -195,17 +208,22 @@ def run_scenario(module, players, keep=False, timeout=90):
     if players:
         n = players
     games = [Game(f"p{i + 1}") for i in range(n)]
+    modes = list(getattr(module, "MODES", None) or ["new"] * n)
     ok = False
     print(f"== {name}")
     try:
-        for g in games:
+        for g, mode in zip(games, modes):
             g.wipe()
-            g.start()
-        for g in games:
-            g.wait(lambda s: s.get("in_world"), "in_world", timeout)
+            g.start(mode)
+        for g, mode in zip(games, modes):
+            if mode.startswith("title"):
+                g.wait(lambda s: s.get("title"), "title screen", timeout)
+            else:
+                g.wait(lambda s: s.get("in_world"), "in_world", timeout)
         if getattr(module, "SETUP", None) == "farm":
-            for g in games:
-                g.cmd({"cmd": "tp", "room": FARM_ROOM, "x": FARM_X, "y": FARM_Y})
+            for g, mode in zip(games, modes):
+                if not mode.startswith("title"):
+                    g.cmd({"cmd": "tp", "room": FARM_ROOM, "x": FARM_X, "y": FARM_Y})
             time.sleep(2)
         module.run(Session(games))
         ok = True

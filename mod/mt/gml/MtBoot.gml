@@ -12,7 +12,7 @@
 #macro MT_VERSION "1.1.0"
 // Bumped whenever game-to-game messages change shape. Peers with a different
 // value are refused by the companion before they ever reach the game.
-#macro MT_PROTO 2
+#macro MT_PROTO 3
 #macro MT_CONFIG_VERSION 2
 
 #macro MT_TO_ALL -1
@@ -152,7 +152,7 @@ function mt_tick() {
     var _in_world = mt_in_world();
     if (_in_world != _rt.in_world) {
         _rt.in_world = _in_world;
-        if (_in_world) { _rt.ever_in_world = true; }
+        if (_in_world) { _rt.ever_in_world = true; mt_farm_on_world_entered(); }
         _rt.game_dirty = true;
     }
 
@@ -181,6 +181,7 @@ function mt_on_title_entered(_ctx) {
         mt_net_reset("left the game");
         mt_ipc_write_game(true);
     }
+    mt_farm_on_title();
     mt_menu_on_title(_ctx);
     mt_dev_on_title(_ctx);
 }
@@ -191,6 +192,7 @@ function mt_register() {
     _rt.registered = true;
 
     mmapi_register(mt_tick);
+    mt_farm_register();
     mmapi_on("game.title_entered", mt_on_title_entered);
     mmapi_on("ui.draw_gui", mt_ui_draw_gui);
     mmapi_on("game.new_day", mt_world_on_new_day);

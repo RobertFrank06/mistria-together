@@ -108,7 +108,7 @@ function mt_sync_on_new_day(_ctx) {
 }
 
 function mt_sync_save_guard(_ctx) {
-    return undefined;
+    return mt_farm_save_guard();
 }
 
 // ---------------------------------------------------------------------------

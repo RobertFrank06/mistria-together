@@ -33,7 +33,15 @@ function mt_dev_state() {
 
 function mt_dev_on_title(_ctx) {
     var _dev = mt_dev_state();
-    if (!_dev.enabled || _dev.started || _dev.mode == "title") { return; }
+    if (!_dev.enabled) { return; }
+    if (_dev.mode == "title") {
+        if (!_dev[$ "title_loop"]) {
+            _dev.title_loop = true;
+            new_chain().join(LinkId.Timer, 30).append(LinkId.Function, mt_dev_title_loop);
+        }
+        return;
+    }
+    if (_dev.started) { return; }
     if (string_copy(_dev.mode, 1, 5) == "menu-") {
         _dev.started = true;
         return;
@@ -154,6 +162,42 @@ function mt_dev_run(_cmd) {
         case "night_state":
             _val = mt_night_dev_state();
             break;
+        case "title_join":
+            mt_farm_begin_join(_cmd.addr, _cmd[$ "name"] ?? "", true);
+            break;
+        case "title_load":
+            // What the normal load menu does: continue the newest save.
+            var _tl = Setup.save_manager.get_saves_ordered();
+            var _tb = Setup.save_manager.manifest.get(_tl[0]);
+            var _ts = LoadState.Load(_tb);
+            patch_save(_ts.loader);
+            mt_farm_close_title();
+            Setup.enter_game(_ts);
+            break;
+        case "quit_to_title":
+            Game.exit_to_menu();
+            break;
+        case "save":
+            var _sp = exact_save_path(Game.unique_identifier, false);
+            ARI.save_position = player_wake_position();
+            save_game(_sp);
+            _val = { path: _sp, exists: file_exists(_sp) };
+            break;
+        case "save_info":
+            _val = { ident: mt_farm_id(), tag: mt_farm_state().tag, adopted: mt_sync_state().adopted, name: string(ARI.name), gold: ARI.gold };
+            break;
+        case "guard_check":
+            var _gs = mt_sync_state();
+            var _was = _gs.adopted;
+            _gs.adopted = _cmd.adopted == true;
+            _val = { result: mt_farm_save_guard() };
+            _gs.adopted = _was;
+            break;
+        case "gold":
+            if (_cmd[$ "set"] != undefined) { ARI.set_gold(_cmd.set); }
+            if (_cmd[$ "add"] != undefined) { ARI.modify_gold(_cmd.add); }
+            _val = { gold: ARI.gold };
+            break;
         case "host_pause":
             mt_world_set_pause(_cmd.on == true);
             break;
@@ -189,12 +233,13 @@ function mt_dev_run(_cmd) {
             else if (_cmd.action == "pick") { mt_menu_nearby(); }
             else if (_cmd.action == "type") { mt_menu_direct_join(); }
             else if (_cmd.action == "host") { mt_menu_on_host(); }
-            else if (_cmd.action == "join") { mt_menu_join_address(_cmd.addr); }
+            else if (_cmd.action == "join") { mt_menu_set("join", _cmd.addr); }
+            else if (_cmd.action == "f9join") { mt_menu_join_address(_cmd.addr); }
             else if (_cmd.action == "off") { mt_menu_on_disconnect(); }
             else if (_cmd.action == "joinlan") {
                 var _dl = mt_menu_link();
                 if (_dl == undefined || !is_array(_dl[$ "lan"]) || array_length(_dl.lan) == 0) { throw "no game found on the network"; }
-                mt_menu_join_address(string(_dl.lan[0].addr));
+                mt_menu_set("join", string(_dl.lan[0].addr));
             }
             break;
         case "trace":
@@ -210,6 +255,59 @@ function mt_dev_run(_cmd) {
             break;
     }
     return _val;
+}
+
+// Run the next queued command file, if any (in the world every 6 frames, on
+// the title screen from mt_dev_title_loop).
+function mt_dev_poll_commands() {
+    var _dev = mt_dev_state();
+    var _rt = __mt_rt();
+    if (_rt.dir == undefined) { return; }
+    var _path = _rt.dir + "/dev_cmd_" + string(_dev.cmd_seq) + ".json";
+    if (!file_exists(_path)) { return; }
+    var _cmd = try_read_json_file(_path, undefined, false);
+    _dev.cmd_seq += 1;
+    if (!is_struct(_cmd)) { return; }
+    var _res = { n: _dev.cmd_seq - 1, ok: true, error: "", value: undefined };
+    try {
+        _res.value = mt_dev_run(_cmd);
+        mt_dev_note("ok " + string(_cmd[$ "cmd"]));
+    } catch (_e) {
+        _res.ok = false;
+        _res.error = string(_e);
+        mt_dev_note("FAILED " + string(_cmd[$ "cmd"]) + ": " + string(_e));
+        mt_warn("dev command failed: " + string(_e));
+    }
+    try { mt_ipc_write("dev_res_" + string(_res.n) + ".json", json_stringify(_res)); }
+    catch (_e2) { mt_warn("dev result not written: " + string(_e2)); }
+}
+
+// MISTRIA_TOGETHER_DEV=title: stay on the title screen and serve commands
+// there (the mod's tick does not run until a save is loaded).
+function mt_dev_title_loop() {
+    var _dev = mt_dev_state();
+    var _rt = __mt_rt();
+    if (mt_in_world()) { _dev.title_loop = false; return; }
+    try {
+        if (_rt.dir != undefined) {
+            mt_dev_poll_commands();
+            var _idents = [];
+            var _keys = Setup.save_manager.manifest.keys();
+            for (var _i = 0; _i < array_length(_keys); _i++) {
+                array_push(_idents, string(Setup.save_manager.manifest.get(_keys[_i]).game_ident));
+            }
+            mt_ipc_write("dev_state.json", json_stringify({
+                title: true, in_world: false, online: false, cmd_seq: _dev.cmd_seq,
+                log: _dev.log, saves: _idents, notice: mt_farm_state().notice, notice_shown: mt_farm_state().notices_shown,
+                join: mt_farm_state().join != undefined,
+            }));
+        }
+    } catch (_e) {
+        mmapi_warn_rate_limited("mt_dev_title", MT_MOD, "dev title loop: " + string(_e));
+    }
+    new_chain()
+        .join(LinkId.Timer, 10)
+        .append(LinkId.Function, mt_dev_title_loop);
 }
 
 function mt_dev_tick() {
@@ -235,27 +333,7 @@ function mt_dev_tick() {
         }
     }
 
-    if (_rt.frame % 6 == 0) {
-        var _path = _rt.dir + "/dev_cmd_" + string(_dev.cmd_seq) + ".json";
-        if (file_exists(_path)) {
-            var _cmd = try_read_json_file(_path, undefined, false);
-            _dev.cmd_seq += 1;
-            if (is_struct(_cmd)) {
-                var _res = { n: _dev.cmd_seq - 1, ok: true, error: "", value: undefined };
-                try {
-                    _res.value = mt_dev_run(_cmd);
-                    mt_dev_note("ok " + string(_cmd[$ "cmd"]));
-                } catch (_e) {
-                    _res.ok = false;
-                    _res.error = string(_e);
-                    mt_dev_note("FAILED " + string(_cmd[$ "cmd"]) + ": " + string(_e));
-                    mt_warn("dev command failed: " + string(_e));
-                }
-                try { mt_ipc_write("dev_res_" + string(_res.n) + ".json", json_stringify(_res)); }
-                catch (_e2) { mt_warn("dev result not written: " + string(_e2)); }
-            }
-        }
-    }
+    if (_rt.frame % 6 == 0) { mt_dev_poll_commands(); }
 
     if (_rt.frame % 15 == 0) {
         var _peers = [];

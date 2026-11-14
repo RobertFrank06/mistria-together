@@ -49,6 +49,7 @@ function mt_players_send_hello(_to) {
         t: "hi",
         name: string(ARI.name),
         farm: string(ARI.farm_name),
+        fid: mt_is_host() ? mt_farm_id() : "",
         ver: MT_VERSION,
         look: _look,
     });
@@ -158,6 +159,7 @@ function mt_players_tick() {
 function mt_players_on_hello(_peer, _d) {
     if (is_string(_d[$ "name"])) { _peer.name = _d.name; }
     if (is_string(_d[$ "farm"])) { _peer.farm = _d.farm; }
+    if (_peer.id == __mt_rt().host_id && is_string(_d[$ "fid"]) && _d.fid != "") { mt_farm_check_host(_d.fid); }
     var _look = _d[$ "look"];
     if (is_struct(_look) && is_array(_look[$ "assets"])) {
         _peer.look = _look;

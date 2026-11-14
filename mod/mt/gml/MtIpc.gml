@@ -57,9 +57,11 @@ function mt_ipc_write_game(_force) {
     _rt.game_written_frame = _rt.frame;
     var _name = "";
     var _farm = "";
+    var _farm_id = "";
     if (_rt.in_world && instance_exists(obj_ari)) {
         _name = string(ARI.name);
         _farm = string(ARI.farm_name);
+        _farm_id = mt_farm_id();
     }
     mt_ipc_write("game.json", json_stringify({
         proto: MT_PROTO,
@@ -71,6 +73,7 @@ function mt_ipc_write_game(_force) {
         ready: _rt.ready && (_rt.in_world || _rt.ever_in_world),
         name: _name,
         farm: _farm,
+        farm_id: _farm_id,
     }));
 }
 

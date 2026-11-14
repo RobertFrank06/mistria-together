@@ -17,7 +17,7 @@ to fail before the feature code is written.**
 | 0 | Test suite | in progress (0.1, 0.3 done; 0.2, 0.4, 0.5 partly) |
 | 1 | Session clock and host pause | done (spikes folded in; 1.7 asserted to 2:00 only) |
 | 2 | Group day end | done except `night_guest_cannot_advance`, `night_host_faints`, `night_two_am`, `night_join_during`, the morning-wait popup (2.8) and unit test 2.2 |
-| 3 | Farmhand saves | not started |
+| 3 | Farmhand saves | done (name-only creation, relaxed save guard; see notes) |
 | 4 | Money and shipping | not started |
 | 5 | Shared progress and animals | not started |
 | 6 | Dropped items and chest locking | not started |
@@ -420,22 +420,22 @@ farm is a local save with the *same* identifier, tagged by the mod as a
 farmhand save. The Join flow, at the title screen, learns the farm's
 identifier before any save is loaded, then loads or creates that save.
 
-- [ ] **3.1 Companion test first** (`companion/tests/session.rs`):
+- [x] **3.1 Companion test first** (`companion/tests/session.rs`):
   `session_info_before_ready`: a companion in menu mode whose game is at the
   title asks the hub for session info and receives the host's farm id, farm
   name, host name and player count without joining the roster.
-- [ ] **3.2 Wire:** new frames `Query` (client -> hub, no body) and `Info {
+- [x] **3.2 Wire:** new frames `Query` (client -> hub, no body) and `Info {
   farm_id, farm_name, host_name, players, game_proto, mod_version, locked }`
   (hub -> client). The hub fills `Info` from the host's `Hello`, which gains
   `farm_id` and `farm_name`. Bump `WIRE_VERSION`. The game writes `farm_id`
   (string of `Game.unique_identifier`) and `farm` into `game.json`
   (`MtIpc.gml`, `mt_ipc_write_game`); `bridge.rs` `GameFile`/`GameInfo` carry
   them.
-- [ ] **3.3 Control:** `control.json` gains `mode: "query"` with `addr`; the
+- [x] **3.3 Control:** `control.json` gains `mode: "query"` with `addr`; the
   companion answers by publishing `info` (or `info_error`) in `link.json`.
   LAN beacons also carry `farm_id` and `farm_name` so nearby games show their
   farm without a query (`lan.rs`).
-- [ ] **3.4 Scenarios first** (`farmhand_*`; these start instances with
+- [x] **3.4 Scenarios first** (`farmhand_*`; these start instances with
   `MISTRIA_TOGETHER_DEV=title` and drive the menu through dev commands, so
   add a title-screen command channel: a chain-driven poll in `MtDev.gml`,
   because the tick does not run on the title):
@@ -451,18 +451,18 @@ identifier before any save is loaded, then loads or creates that save.
     load menu with no session; it is returned to the title with a notice.
   - `farmhand_no_early_save`: a guest save attempt before the host's world is
     adopted is vetoed.
-- [ ] **3.5 Tag:** `mmapi_modsave_register(MT_MOD, mt_save_collect,
+- [x] **3.5 Tag:** `mmapi_modsave_register(MT_MOD, mt_save_collect,
   mt_save_apply)` storing `{ v:1, role:"host"|"farmhand"|"solo", farm_id,
   host_name, farm_name }`. A host's save is tagged `host` the first time it
   hosts (informational only).
-- [ ] **3.6 Join flow** (`MtMenu.gml`): choosing a game (nearby, friend,
+- [x] **3.6 Join flow** (`MtMenu.gml`): choosing a game (nearby, friend,
   direct) sends `query`; the menu then shows the farm and either "Continue as
   <name>" (a local save with that ident exists in
   `Setup.save_manager.manifest` and its tag says farmhand of this farm) or
   "Create your farmhand". If a local save has that ident but is not tagged
   farmhand (it is the player's own farm with a colliding id) refuse and say
   so.
-- [ ] **3.7 Create:** run the game's character creation
+- [x] **3.7 Create:** run the game's character creation
   (`start_character_creation(preset, callback, true)`,
   `scripts/GameplaySystems/Cycle/NewGame.gml:326`), then build
   `LoadState.New({ name, farm_name: <host farm name>, pronouns, presets,
@@ -470,22 +470,30 @@ identifier before any save is loaded, then loads or creates that save.
   (no prologue; world progress follows the host), overwrite
   `load_state.game_ident` with the farm id, set the pending tag, write
   `control.json` `join`, and call `Setup.enter_game(load_state)`.
-- [ ] **3.8 Continue:** `LoadState.Load(bundle)` for that save,
+- [x] **3.8 Continue:** `LoadState.Load(bundle)` for that save,
   `patch_save(loader)`, write `control.json` `join`, `Setup.enter_game`.
-- [ ] **3.9 Refusals:** (a) in-world F9 Join is only offered when the loaded
+- [x] **3.9 Refusals:** (a) in-world F9 Join is only offered when the loaded
   save is tagged farmhand of a farm; otherwise the menu explains to join from
   the title. (b) On the first tick after a load, if the save is tagged
   farmhand and the mod is not in the middle of a join for that farm id, call
   `Game.exit_to_menu()` and show a notice on the title. (c) On `welcome`, if
   the host's farm id differs from the save's tag, disconnect with a message.
-- [ ] **3.10 Save guard:** replace the stub `mt_sync_save_guard`: for a
+- [x] **3.10 Save guard:** replace the stub `mt_sync_save_guard`: for a
   farmhand, return `false` unless the host's world is adopted and no snapshot
   is pending; for anyone, allow otherwise. Remove the solo-save backup path
   from the join flow only after `farmhand_solo_refused` passes; keep
   `mt_sync_backup_save` for hosts upgrading from older versions and never
   overwrite an existing backup.
-- [ ] **Done when:** all `farmhand_*` scenarios and the earlier suite pass;
+- [x] **Done when:** all `farmhand_*` scenarios and the earlier suite pass;
   README install/play text is updated for the new Join flow.
+
+**Deviations (decided while building):** character creation is a name prompt
+with default looks (the game's customization menu needs a live player, which
+does not exist at the title); the save guard vetoes only before the host's
+world is adopted (a night-end autosave while a snapshot is pending must be
+allowed, or a farmhand's first night would never be saved); `hi` carries the
+host's `fid` (`MT_PROTO` 3); LAN beacons and `Hello` carry the farm id and name
+(`WIRE_VERSION` 2).
 
 ## Phase 4: Money and shipping
 

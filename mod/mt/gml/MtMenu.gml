@@ -296,10 +296,17 @@ function mt_menu_nearby(_page = 0) {
 function mt_menu_join_address(_addr) {
     _addr = string_trim(string(_addr));
     if (_addr == "") { return; }
-    mt_menu_set("join", _addr);
     if (!mt_in_world()) {
-        mt_menu_notice("Multiplayer", "You join " + _addr + " as soon as you load a save.");
+        // The title screen: find out about the farm, then continue or create
+        // the farmhand (MtFarm.gml).
+        mt_farm_begin_join(_addr);
+        return;
     }
+    if (!mt_farm_is_farmhand()) {
+        mt_menu_notice("Multiplayer", "To join a farm, go to the title screen and choose Multiplayer, then Join. Your own saves are never used for joining.");
+        return;
+    }
+    mt_menu_set("join", _addr);
 }
 
 // --- title screen ----------------------------------------------------------
