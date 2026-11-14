@@ -805,8 +805,8 @@ Checked against game v1.0.8 scripts. Paths are under `assets/gml/`.
 
 ### Spike results
 
-Phase 0.5 spikes were answered by the scenarios that depend on them, not run
-as throwaway experiments (a spike that failed would have failed its scenario):
+Each Phase 0.5 spike has a runnable scenario (`tools/gametest.py run spike_<name>`,
+manual-only) that runs the scenario answering it; all pass:
 
 | Spike | Answered by | Result |
 | --- | --- | --- |

@@ -268,6 +268,12 @@ function mt_dev_run(_cmd) {
                 }
             }
             break;
+        case "look":
+            // The farmhand's look (skin tone of the selected preset); `set` changes it.
+            var _lp = ARI.presets.get(ARI.preset_index_selected);
+            if (_cmd[$ "set"] != undefined) { _lp.skin_tone = _cmd.set; }
+            _val = { tone: _lp.skin_tone };
+            break;
         case "customization_state":
             _val = { open: ANCHOR.get_menu(Menu.Customization) != undefined };
             break;
