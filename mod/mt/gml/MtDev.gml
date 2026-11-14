@@ -226,6 +226,25 @@ function mt_dev_run(_cmd) {
             // A player's drop: one turnip stack a little to the right.
             drop_item([new LiveItem(ItemId.Turnip)], obj_ari.x + 220, obj_ari.y);
             break;
+        case "mines":
+            mt_mines_host_set(_cmd.on == true);
+            _val = { on: mt_mines_enabled() };
+            break;
+        case "mine":
+            enter_dungeon(_cmd.floor);
+            break;
+        case "mine_break":
+            // Break the first breakable object next to the player on this floor.
+            var _mb = 0;
+            for (var _mi = 0; _mi < GRID.node_len && _mb == 0; _mi++) {
+                if (GRID.node_object_id[_mi] != undefined && GRID.node_parent[_mi].top_left_x == _mi % GRID.dims.x && GRID.node_parent[_mi].top_left_y == _mi div GRID.dims.x
+                    && object_id_to_object_category(GRID.node_object_id[_mi]) == ObjectCategory.Breakable) {
+                    erase_object_node(GRID, _mi);
+                    _val = { x: _mi % GRID.dims.x, y: _mi div GRID.dims.x };
+                    _mb = 1;
+                }
+            }
+            break;
         case "scene_flag":
             // As a story scene does: the cutscene pause flag.
             if (_cmd.on == true) { PAUSE_STATUS = PAUSE_STATUS | PauseStatus.CUTSCENE; }

@@ -35,6 +35,9 @@ function mt_world_reset() {
         st_active: false,       // host: st is being driven (a guest is online)
         st_paused: false,       // host: explicit pause
         st_night: false,        // host: a night is running (Phase 2)
+        mine_itin: undefined,   // the day's dungeon rooms, chosen by the host
+        mines: false,           // shared mine floors (the host's setting)
+        mine_seed: 1,           // session seed for floor generation
         own_mpd: undefined,     // guest: its own MINUTES_PER_DAY while following the host's
     };
     mt_sync_reset();
@@ -49,6 +52,7 @@ function mt_world_on_peer_joined(_id) {
     _w.time_sent_frame = -100000;    // push the time to the newcomer right away
     mt_money_on_peer_joined(_id);
     mt_progress_send_all(_id);
+    if (mt_is_host() && mt_world_state().mine_itin != undefined) { mt_send(_id, { t: "mi", l: mt_world_state().mine_itin }); }
     mt_sync_on_peer_joined(_id);
 }
 
@@ -75,6 +79,8 @@ function mt_world_time_message() {
         pz: _w.st_paused ? 1 : 0,
         night: _w.st_night ? 1 : 0,
         mpd: MINUTES_PER_DAY,
+        mn: _w.mines ? 1 : 0,
+        ms: _w.mine_seed,
         w: WEATHER.weather,
         fc: WEATHER.forecast,
     };
@@ -142,7 +148,7 @@ function mt_world_tick() {
                 _w.st_active = false;
                 _w.st_paused = false;
             }
-            var _key = string(_w.st_paused) + string(_w.st_night) + string(MINUTES_PER_DAY);
+            var _key = string(_w.st_paused) + string(_w.st_night) + string(MINUTES_PER_DAY) + string(_w.mines);
             if (_key != _w.time_sent_key) { _w.time_sent_key = _key; _w.time_sent_frame = -100000; }
             if (_rt.frame - _w.time_sent_frame >= MT_TIME_INTERVAL) {
                 _w.time_sent_frame = _rt.frame;
@@ -166,6 +172,8 @@ function mt_world_on_time(_peer, _d) {
     var _w = mt_world_state();
     _w.host_paused = _d[$ "pz"] == 1;
     _w.st_night = _d[$ "night"] == 1;
+    _w.mines = _d[$ "mn"] == 1;
+    if (is_numeric(_d[$ "ms"])) { _w.mine_seed = _d.ms; }
 
     if (is_numeric(_d[$ "mpd"]) && _d.mpd > 0 && _d.mpd != MINUTES_PER_DAY) {
         if (_w.own_mpd == undefined) { _w.own_mpd = MINUTES_PER_DAY; }
@@ -197,6 +205,10 @@ function mt_world_on_time(_peer, _d) {
 function mt_world_on_message(_peer, _t, _d) {
     if (_t == "tm") {
         mt_world_on_time(_peer, _d);
+        return;
+    }
+    if (_t == "mi") {
+        mt_mines_on_message(_peer, _t, _d);
         return;
     }
     if (_t == "id" || _t == "ic" || _t == "cg" || _t == "cd" || _t == "ix" || _t == "il" || _t == "kl" || _t == "kg" || _t == "kd" || _t == "kr") {
@@ -234,7 +246,7 @@ function mt_world_on_new_day(_ctx) {
     mt_money_on_new_day(_ctx);
     if (mt_is_host()) { mt_progress_send_all(MT_TO_ALL); }
     var _w = mt_world_state();
-    if (mt_is_host()) { _w.st = hours(6); _w.st_night = false; _w.time_sent_frame = -100000; }
+    if (mt_is_host()) { _w.st = hours(6); _w.st_night = false; _w.mine_seed = irandom(1000000000); _w.time_sent_frame = -100000; _w.mine_itin = undefined; mt_mines_host_make(); }
     mt_sync_on_new_day(_ctx);
 }
 

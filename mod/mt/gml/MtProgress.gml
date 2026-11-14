@@ -161,5 +161,5 @@ function mt_progress_on_message(_peer, _t, _d) {
 function mt_progress_dev_state() {
     var _items = 0;
     for (var _i = 0; _i < ItemId.LEN; _i++) { if (MUSEUM_PROGRESS[_i] == true) { _items += 1; } }
-    return { museum: _items, depth: MAXIMUM_REACHED_DUNGEON_LEVEL };
+    return { museum: _items, depth: MAXIMUM_REACHED_DUNGEON_LEVEL, mines: mt_mines_enabled(), seed: mt_world_state().mine_seed };
 }

@@ -22,7 +22,7 @@ to fail before the feature code is written.**
 | 5 | Shared progress and animals | done (museum set rewards for other players not given; animal scenario only checks a farm with animals exists) |
 | 6 | Dropped items and chest locking | done (items dropped in rooms nobody is in are not arbitrated) |
 | 7 | Scenes and festivals | done (cleared items may also reappear at the next room entry from the game's own lost-items list) |
-| 8 | Mines | not started |
+| 8 | Mines | done (host setting `mines`, off by default; monsters stay local) |
 
 Known gaps in what is shipped, all closed by the phases below: the host's
 menus pause everyone (Phase 1); a guest can be dragged through the night or
@@ -668,28 +668,31 @@ DESIGN.md sections 4, 5, 7. Needs: Phases 1, 2, 6.
 DESIGN.md section 8. Needs: Phase 3. Experimental: ship behind a host
 setting until its scenarios are stable.
 
-- [ ] **8.1 Spike first** `spike_mine_seed`: on `dungeon.runner_created` and
+- [x] **8.1 Spike first** `spike_mine_seed`: on `dungeon.runner_created` and
   `dungeon.room_build_begin` call `random_set_seed(<fixed>)`; build the same
   floor twice in one game and once on a second instance; compare digests of
   the dungeon grid. Record whether the itinerary (built before
   `runner_created` in `create_dungeon_itinerary`,
   `scripts/GameplaySystems/Dungeon/enter_dungeon.gml:90`) is also equal; if
   not, the floor's room id must be sent by the first player on that floor.
-- [ ] **8.2 Scenarios first:** `mine_same_floor` (both enter floor N; digests
+- [x] **8.2 Scenarios first:** `mine_same_floor` (both enter floor N; digests
   equal; they see each other), `mine_rock_shared` (one breaks a rock; gone for
   both), `mine_different_floors` (players on different floors do not see each
   other or each other's changes).
-- [ ] **8.3 Seeding.** Session seed chosen by the host per day, sent in `tm`.
+- [x] **8.3 Seeding.** Session seed chosen by the host per day, sent in `tm`.
   Floor seed = session seed + floor number. Seed at `room_build_begin`, and
   call `randomize()` after `dungeon.floor_built` so play is not predictable.
-- [ ] **8.4 Location key.** `mt_location_key` returns `dng:<floor>` in a
+- [x] **8.4 Location key.** `mt_location_key` returns `dng:<floor>` in a
   dungeon room instead of the per-player key; `mt_sync_grid_shared` allows
   the dungeon grid when keys match; grid references in `wo/wd/wt` carry the
   floor.
-- [ ] **Done when:** scenarios pass; the limitation (monsters local) is in
+- [x] **Done when:** scenarios pass; the limitation (monsters local) is in
   README.
 
 ---
+
+
+Notes from building it: the game's dungeon itinerary (`create_dungeon_itinerary`) is not controlled by `random_set_seed`, so the host generates it once a day and sends it (`mi`, room ids as strings); the per-floor layout is then reproduced by seeding at `dungeon.room_build_begin`.
 
 ## Verified game facts
 
@@ -844,8 +847,11 @@ with the code; `tools/lint-gml.py` checks that every type has a handler.
 | `gd` `gx` `gb` `gm` | see 4B | yes | 4 | shared wallet |
 | `mu` `md` | any -> all | yes | 5 | museum donation, mine depth |
 | `an` | any -> all | yes | 5 | animal care state |
-| `id` `ip` `ix` `il` | see 6 | yes | 6 | dropped items |
-| `cl` `cg` `cd` | see 6 | yes | 6 | chest lock |
+| `id` `ic` `cg` `cd` `ix` `il` | see 6 | yes | 6, 7 | dropped items (announce, claim, granted, denied, gone, list) |
+| `kl` `kg` `kd` `kr` | see 6 | yes | 6 | chest lock (request, granted, denied, release) |
+| `gr` | guest -> host | yes | 4 | own gold, for a later switch to a shared wallet |
+| `wu` | host -> all | yes | 5 | unlocked world mods |
+| `mi` | host -> all | yes | 8 | the day's mine rooms |
 
 System messages from the companion (`from = -1`): `welcome`, `join`, `leave`,
 `bye`, `stat`, `blob`.

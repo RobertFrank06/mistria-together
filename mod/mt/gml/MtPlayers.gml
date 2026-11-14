@@ -30,8 +30,10 @@ function mt_location_key() {
     var _key = string(GRID.location_id);
     if (GRID.dyn_index != undefined) { _key += ":" + string(GRID.dyn_index); }
     if (is_dungeon_room(room())) {
-        // Dungeon floors are generated per player and are not shared (yet).
-        _key += ":p" + string(__mt_rt().self_id);
+        // Shared floors (host setting) are one place per floor number; otherwise
+        // each player's floor is their own.
+        if (mt_mines_enabled()) { _key = "dng:" + string(mt_mines_floor()); }
+        else { _key += ":p" + string(__mt_rt().self_id); }
     }
     return _key;
 }

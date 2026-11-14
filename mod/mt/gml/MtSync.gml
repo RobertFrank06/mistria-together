@@ -434,6 +434,7 @@ function mt_sync_try_apply_pending() {
 // ---------------------------------------------------------------------------
 
 function mt_sync_grid_ref(_grid) {
+    if (_grid.location_id == LocationId.Dungeon) { return [_grid.location_id, -1, mt_mines_floor()]; }
     return [_grid.location_id, _grid.dyn_index == undefined ? -1 : _grid.dyn_index];
 }
 
@@ -447,13 +448,17 @@ function mt_sync_find_grid(_ref) {
         var _g = DYNAMIC_GRIDS.get(_dyn);
         return (_g != undefined && _g.location_id == _loc) ? _g : undefined;
     }
-    if (_loc < 0 || _loc >= LocationId.LEN || _loc == LocationId.Dungeon || GRIDS == undefined) { return undefined; }
+    if (_loc == LocationId.Dungeon) {
+        var _fl = array_length(_ref) > 2 ? _ref[2] : undefined;
+        return (mt_mines_enabled() && GRID != undefined && GRID.location_id == LocationId.Dungeon && mt_mines_floor() == _fl) ? GRID : undefined;
+    }
+    if (_loc < 0 || _loc >= LocationId.LEN || GRIDS == undefined) { return undefined; }
     return GRIDS[_loc];
 }
 
 // Whether changes to this grid are shared at all.
 function mt_sync_grid_shared(_grid) {
-    return _grid != undefined && _grid.location_id != LocationId.Dungeon && _grid.is_setup;
+    return _grid != undefined && (_grid.location_id != LocationId.Dungeon || mt_mines_enabled()) && _grid.is_setup;
 }
 
 function mt_sync_baseline(_grid) {
