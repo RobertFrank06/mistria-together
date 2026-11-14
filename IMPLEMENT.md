@@ -19,7 +19,7 @@ to fail before the feature code is written.**
 | 2 | Group day end | done except `night_guest_cannot_advance`, `night_host_faints`, `night_two_am`, `night_join_during`, the morning-wait popup (2.8) and unit test 2.2 |
 | 3 | Farmhand saves | done (name-only creation, relaxed save guard; see notes) |
 | 4 | Money and shipping | done (shared-wallet race: the host's own overspend is clamped at zero) |
-| 5 | Shared progress and animals | not started |
+| 5 | Shared progress and animals | done (museum set rewards for other players not given; animal scenario only checks a farm with animals exists) |
 | 6 | Dropped items and chest locking | not started |
 | 7 | Scenes and festivals | not started |
 | 8 | Mines | not started |
@@ -568,11 +568,11 @@ summary's `init` (`:96`), as one `modify_gold` call.
 
 DESIGN.md section 3. Needs: Phase 3.
 
-- [ ] **5.1 Ownership audit (first task, a document change):** for each item
+- [x] **5.1 Ownership audit (first task, a document change):** for each item
   below, confirm in `SaveGame.gml:63-246` and `LoadGame.gml` which save
   section holds it, and add a table "Shared state: where it lives" to the
   facts section. Do not sync anything not in that table.
-- [ ] **5.2 Museum.** Scenario `progress_museum`: guest donates; the host's
+- [x] **5.2 Museum.** Scenario `progress_museum`: guest donates; the host's
   museum shows it; both got the set reward if it completed a set; survives a
   night. State: `MUSEUM_PROGRESS` (in `gamedata.museum_progress`) plus world
   facts `museum_donated_*`. Hook `museum.donate_item` (ctx `{ item_id }`,
@@ -580,10 +580,10 @@ DESIGN.md section 3. Needs: Phase 3.
   `register_item_to_museum(item_id)` (`scripts/Museum.gml:106`). Add the
   museum array to the snapshot header. Rewards for others: grant through the
   game's reward function found in the audit, once per player per set.
-- [ ] **5.3 Mine depth.** Scenario `progress_mine_depth`. Send `md { level }`
+- [x] **5.3 Mine depth.** Scenario `progress_mine_depth`. Send `md { level }`
   when `MAXIMUM_REACHED_DUNGEON_LEVEL` grows (poll once a second); receivers
   take the max. Already in the snapshot.
-- [ ] **5.4 World unlocks.** Scenario `progress_unlock`: set an unlock fact
+- [x] **5.4 World unlocks.** Scenario `progress_unlock`: set an unlock fact
   on the host; the guest's `world_mod_enabled(...)` for that area becomes
   true after the next snapshot and the area is open. Build the key list at
   runtime from `WORLD_MODS[*].requirements` (`scripts/WorldMod.gml:21`):
@@ -593,16 +593,16 @@ DESIGN.md section 3. Needs: Phase 3.
   `T2R.write` + `T2R.update()` and by adding to its scene history. Never copy
   facts that are personal (relationship, dating, spouse); keep an explicit
   deny list and a unit test for the filter.
-- [ ] **5.5 Farm animals.** Scenario `animals_care`: guest pets and feeds an
+- [x] **5.5 Farm animals.** Scenario `animals_care`: guest pets and feeds an
   animal; the host's animal shows petted/fed; produce next morning matches on
   both. Animals live on building nodes (`building.stable`), which live sync
   skips. Add message `an { root, idx, pat, eaten, outside, hearts, prod }`
   sent on the `animal.pet` hook and from a once-a-second check of the
   animals in the current building; apply to the matching `Animal` struct on
   every machine. The host's state wins each morning through the snapshot.
-- [ ] **5.6 Farm expansion and house upgrades:** already in the snapshot;
+- [x] **5.6 Farm expansion and house upgrades:** already in the snapshot;
   add scenario `progress_farm_expand` to pin it.
-- [ ] **Done when:** scenarios pass; README "What works" gains only what
+- [x] **Done when:** scenarios pass; README "What works" gains only what
   these scenarios prove.
 
 ## Phase 6: Dropped items and chest locking
@@ -788,6 +788,17 @@ Checked against game v1.0.8 scripts. Paths are under `assets/gml/`.
   visits.
 - `object.chest_open_guard` and `items.chest_opened` are about treasure
   chests and chest items, not storage chests. Storage uses `Menu.Storage`.
+
+### Shared state: where it lives
+- Museum (`MUSEUM_PROGRESS`), deepest mine floor (`MAXIMUM_REACHED_DUNGEON_LEVEL`),
+  farm expansion, pet: `gamedata` section of the save, i.e. the world.
+- The T2 "world facts" store (`T2R.read_world()`) is NOT only world state: it
+  also holds gold, essence, health, NPC relationship statuses and birthdays
+  (`scripts/.../T2R`). Never copy it wholesale. World unlocks are shared by
+  re-fulfilling the world mods' own requirements with `fulfill_requirement`
+  (scene history, named facts, quests), skipping gold/item requirements.
+- Animals: `has_been_pat`, `has_eaten` on each `Animal`; synced by polling
+  `get_all_animals()` once a second.
 
 ### Spike results
 

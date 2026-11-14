@@ -72,6 +72,7 @@ function mt_net_reset(_reason) {
     _rt.state_sent_key = "";
     _rt.pose_sent = undefined;
     mt_money_reset();
+    mt_progress_reset();
     mt_world_reset();
     mt_night_reset();
     if (_was_online) {

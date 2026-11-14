@@ -193,6 +193,58 @@ function mt_dev_run(_cmd) {
             _val = { result: mt_farm_save_guard() };
             _gs.adopted = _was;
             break;
+        case "donate":
+            // As the museum menu does: donate the first museum-eligible item id given.
+            var _donate = undefined;
+            if (_cmd[$ "item"] != undefined) { _donate = string_to_item_id(_cmd.item); }
+            for (var _wg = 0; _wg < MuseumWing.LEN && _donate == undefined; _wg++) {
+                var _wk = MUSEUM_DATA.data[_wg].sets.keys();
+                for (var _sk = 0; _sk < array_length(_wk) && _donate == undefined; _sk++) {
+                    var _its = MUSEUM_DATA.data[_wg].sets.get(_wk[_sk]).items;
+                    for (var _ii = 0; _ii < array_length(_its); _ii++) {
+                        if (MUSEUM_PROGRESS[_its[_ii]] != true) { _donate = _its[_ii]; break; }
+                    }
+                }
+            }
+            donate_item_to_museum(_donate);
+            _val = { item: item_id_to_string(_donate) };
+            break;
+        case "mine_depth":
+            MAXIMUM_REACHED_DUNGEON_LEVEL = _cmd.level;
+            break;
+        case "animals":
+            // List animals; with `pet`, pet the first one that can be.
+            var _al = get_all_animals();
+            _val = { count: _al.count(), animals: [] };
+            for (var _ai = 0; _ai < _al.count(); _ai++) {
+                var _an = _al.get(_ai);
+                if (_cmd[$ "pet"] == true && _an.can_pet()) { _an.pet(); }
+                array_push(_val.animals, { idx: _an.idx, pat: _an.has_been_pat, eaten: _an.has_eaten });
+            }
+            break;
+        case "wm_enable":
+            mt_progress_fulfill_mod(_cmd.i);
+            _val = { on: world_mod_enabled(_cmd.i) };
+            break;
+        case "wm_state":
+            _val = { on: world_mod_enabled(_cmd.i), count: array_length(mt_progress_unlocked_list()) };
+            break;
+        case "wm_probe":
+            // What do the world mods' requirements look like? (spike)
+            _val = { mods: [] };
+            for (var _wi = 0; _wi < WorldMod.LEN; _wi++) {
+                var _req = WORLD_MODS[_wi].requirements;
+                var _entry = { i: _wi, name: string(_wi), on: world_mod_enabled(_wi), req: [] };
+                if (is_array(_req)) {
+                    for (var _ri = 0; _ri < array_length(_req); _ri++) {
+                        if (_req[_ri] != undefined && !(is_array(_req[_ri]) && array_length(_req[_ri]) == 0)) {
+                            array_push(_entry.req, [_ri, string(_req[_ri])]);
+                        }
+                    }
+                } else { _entry.req = string(_req); }
+                array_push(_val.mods, _entry);
+            }
+            break;
         case "wallet":
             if (_cmd[$ "now"] == true) { mt_money_apply_mode(_cmd.mode); } else { mt_money_request_mode(_cmd.mode); }
             _val = { mode: mt_money_state().mode, pending: mt_money_state().pending };
@@ -407,6 +459,7 @@ function mt_dev_tick() {
         }
         _state.night = mt_night_dev_state();
         _state.money = mt_money_dev_state();
+        _state.progress = mt_progress_dev_state();
         mt_ipc_write("dev_state.json", json_stringify(_state));
     }
 }

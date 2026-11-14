@@ -48,6 +48,7 @@ function mt_world_on_peer_joined(_id) {
     var _w = mt_world_state();
     _w.time_sent_frame = -100000;    // push the time to the newcomer right away
     mt_money_on_peer_joined(_id);
+    mt_progress_send_all(_id);
     mt_sync_on_peer_joined(_id);
 }
 
@@ -153,6 +154,7 @@ function mt_world_tick() {
         mt_world_follow();
     }
     mt_money_tick();
+    mt_progress_tick();
     mt_sync_tick();
 }
 
@@ -196,6 +198,10 @@ function mt_world_on_message(_peer, _t, _d) {
         mt_world_on_time(_peer, _d);
         return;
     }
+    if (_t == "mu" || _t == "md" || _t == "an" || _t == "wu") {
+        mt_progress_on_message(_peer, _t, _d);
+        return;
+    }
     if (_t == "gd" || _t == "gx" || _t == "gb" || _t == "gm" || _t == "gr") {
         mt_money_on_message(_peer, _t, _d);
         return;
@@ -221,6 +227,7 @@ function mt_world_filter_time_advance(_value, _ctx) {
 function mt_world_on_new_day(_ctx) {
     mt_night_on_new_day(_ctx);
     mt_money_on_new_day(_ctx);
+    if (mt_is_host()) { mt_progress_send_all(MT_TO_ALL); }
     var _w = mt_world_state();
     if (mt_is_host()) { _w.st = hours(6); _w.st_night = false; _w.time_sent_frame = -100000; }
     mt_sync_on_new_day(_ctx);
