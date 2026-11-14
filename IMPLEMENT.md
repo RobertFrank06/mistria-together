@@ -805,7 +805,19 @@ Checked against game v1.0.8 scripts. Paths are under `assets/gml/`.
 
 ### Spike results
 
-_(Filled in by Phase 0.5.)_
+Phase 0.5 spikes were answered by the scenarios that depend on them, not run
+as throwaway experiments (a spike that failed would have failed its scenario):
+
+| Spike | Answered by | Result |
+| --- | --- | --- |
+| `bed_override` | `night_one_waits`, `night_both_sleep` | override claims beds; the game's own sleep scene runs later via `MIST.request_scene("sleep")` |
+| `summary_hold` | `night_faint_holds`, `night_two_am` | `next_day_button` lock from the tick holds the summary; unlocking lets the day finish |
+| `clock_jump_wrap` | `clock_no_skip` | wrapped `CLOCK.jump` ignores outside skips, the stored original still works |
+| `clock_follow` | `clock_host_menu`, `clock_guest_menu` | a paused game catches up to session time on close (within 2 game minutes) |
+| `load_with_ident` | `farmhand_first_join`, `farmhand_rejoin` | `LoadState.New` with an overwritten `game_ident` saves as `game-<ident>-autosave.sav` and loads back |
+| `modsave` | `farmhand_first_join`, `farmhand_offline_refused` | sidecar `mod_data/mistria_together/saves/<ident>.json` round-trips; absent for other saves |
+| `bin_drain` | `money_bin_split`, `money_faint_no_early_pay` | the first `modify_gold` during the summary is the bin payout and can be cancelled by the `player.gold_delta` filter |
+| `mine_seed` | `mine_same_floor`, `mine_rock_shared` | the dungeon itinerary is NOT controlled by `random_set_seed`; the host sends it; floor layouts are reproduced by seeding at `dungeon.room_build_begin` |
 
 Found while building Phase 2:
 - `object.interact` override: the handler gets the node; returning `true`
