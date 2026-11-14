@@ -8,7 +8,7 @@
 function mt_progress_state() {
     var _rt = __mt_rt();
     if (_rt[$ "progress"] == undefined) {
-        _rt.progress = { depth_sent: 0, animals: {}, scan_frame: 0, unlock_key: "" };
+        _rt.progress = { depth_sent: 0, animals: {}, scan_frame: 0, unlock_key: "", awarded: {} };
     }
     return _rt.progress;
 }
@@ -30,15 +30,48 @@ function mt_progress_museum_list() {
 // museum.donate_item event: tell everybody (the item is registered right after).
 function mt_progress_on_donate(_ctx) {
     if (!mt_night_active()) { return; }
-    try { mt_send(MT_TO_ALL, { t: "mu", l: [item_id_to_string(_ctx.item_id)] }); }
+    try { mt_send(MT_TO_ALL, { t: "mu", l: [item_id_to_string(_ctx.item_id)], r: 1 }); }
     catch (_e) { mmapi_warn_rate_limited("mt_mu", MT_MOD, "museum message failed: " + string(_e)); }
 }
 
-function mt_progress_apply_museum(_list) {
+function mt_progress_apply_museum(_list, _live = false) {
     if (!is_array(_list)) { return; }
     for (var _i = 0; _i < array_length(_list); _i++) {
         var _id = try_string_to_item_id(_list[_i]);
-        if (_id != undefined && MUSEUM_PROGRESS[_id] != true) { register_item_to_museum(_id); }
+        if (_id != undefined && MUSEUM_PROGRESS[_id] != true) {
+            register_item_to_museum(_id);
+            if (_live) { mt_progress_award_set(_id); }
+        }
+    }
+}
+
+// A live donation by someone else may have completed a set: everyone who was
+// online gets that set's reward in their own inventory, once per set.
+function mt_progress_award_set(_item_id) {
+    var _p = mt_progress_state();
+    for (var _w = 0; _w < MuseumWing.LEN; _w++) {
+        var _wing = MUSEUM_DATA.data[_w];
+        var _keys = _wing.sets.keys();
+        for (var _s = 0; _s < array_length(_keys); _s++) {
+            var _set = _wing.sets.get(_keys[_s]);
+            if (!array_contains(_set.items, _item_id)) { continue; }
+            if (museum_set_progress(_w, _keys[_s]) != museum_set_size(_w, _keys[_s])) { return; }
+            var _tag = string(_w) + ":" + string(_keys[_s]);
+            if (_p.awarded[$ _tag] == true) { return; }
+            _p.awarded[$ _tag] = true;
+            var _done = 0;
+            for (var _k = 0; _k < array_length(_keys); _k++) {
+                var _size = museum_set_size(_w, _keys[_k]);
+                if (_size == 0) { continue; }
+                _done += museum_set_progress(_w, _keys[_k]) == _size;
+            }
+            var _rewards = _wing.rewards.get(_done - 1).entries;
+            _rewards.for_each(function(reward) {
+                consume_reward(reward).for_each(function(e) { ARI.give_item(e, 1, false, false); });
+            });
+            mt_ui_toast("Museum set completed: " + string(_keys[_s]));
+            return;
+        }
     }
 }
 
@@ -148,7 +181,7 @@ function mt_progress_send_all(_to) {
 function mt_progress_on_message(_peer, _t, _d) {
     try {
         switch (_t) {
-            case "mu": mt_progress_apply_museum(_d[$ "l"]); break;
+            case "mu": mt_progress_apply_museum(_d[$ "l"], _d[$ "r"] == 1); break;
             case "md": mt_progress_apply_depth(_d[$ "l"]); break;
             case "wu": if (_peer.id == __mt_rt().host_id) { mt_progress_apply_unlocks(_d[$ "l"]); } break;
             case "an": mt_progress_apply_animal(_d); break;

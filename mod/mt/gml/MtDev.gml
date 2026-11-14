@@ -209,6 +209,29 @@ function mt_dev_run(_cmd) {
             donate_item_to_museum(_donate);
             _val = { item: item_id_to_string(_donate) };
             break;
+        case "donate_set":
+            // Donate every item of the first museum set that has items left.
+            var _dn = 0;
+            for (var _dw = 0; _dw < MuseumWing.LEN && _dn == 0; _dw++) {
+                var _dk = MUSEUM_DATA.data[_dw].sets.keys();
+                for (var _ds = 0; _ds < array_length(_dk) && _dn == 0; _ds++) {
+                    var _di = MUSEUM_DATA.data[_dw].sets.get(_dk[_ds]).items;
+                    if (array_length(_di) == 0) { continue; }
+                    for (var _dj = 0; _dj < array_length(_di); _dj++) {
+                        if (MUSEUM_PROGRESS[_di[_dj]] != true) { donate_item_to_museum(_di[_dj]); _dn += 1; }
+                    }
+                }
+            }
+            _val = { donated: _dn };
+            break;
+        case "inv_total":
+            var _it2 = 0;
+            for (var _is2 = 0; _is2 < ARI.inventory.slots.count(); _is2++) {
+                var _sl2 = ARI.inventory.slots.get(_is2);
+                if (_sl2.item != undefined) { _it2 += _sl2.count; }
+            }
+            _val = { total: _it2 };
+            break;
         case "mine_depth":
             MAXIMUM_REACHED_DUNGEON_LEVEL = _cmd.level;
             break;

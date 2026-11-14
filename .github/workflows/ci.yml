@@ -25,5 +25,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: python3 tools/lint-gml.py
-      # tools/check-gml.sh needs MOMI's checker (MOMI_GML_CHECK); run it locally or
-      # where MOMI is installed. See the script header.
+
+  gml-compile:
+    # MOMI's own GML checker ships inside its CLI bundle, which extracts it on
+    # first run. Not yet seen to run on a CI runner, so it cannot fail the build.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.17.0 --repo Garethp/Mods-of-Mistria-Installer \
+            --pattern ModsOfMistriaInstaller-cli-linux --dir "$RUNNER_TEMP/momi"
+          chmod +x "$RUNNER_TEMP/momi/ModsOfMistriaInstaller-cli-linux"
+          "$RUNNER_TEMP/momi/ModsOfMistriaInstaller-cli-linux" --version || true
+          tools/check-gml.sh

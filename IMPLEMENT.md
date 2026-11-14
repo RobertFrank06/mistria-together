@@ -19,7 +19,7 @@ to fail before the feature code is written.**
 | 2 | Group day end | done |
 | 3 | Farmhand saves | done (name-only creation, relaxed save guard; see notes) |
 | 4 | Money and shipping | done (shared-wallet race: the host's own overspend is clamped at zero) |
-| 5 | Shared progress and animals | done (museum set rewards for other players not given; animal scenario only checks a farm with animals exists) |
+| 5 | Shared progress and animals | done (animal scenario only checks a farm with animals exists) |
 | 6 | Dropped items and chest locking | done (items dropped in rooms nobody is in are not arbitrated) |
 | 7 | Scenes and festivals | done (cleared items may also reappear at the next room entry from the game's own lost-items list) |
 | 8 | Mines | done (host setting `mines`, off by default; monsters stay local) |
