@@ -12,7 +12,7 @@
 #macro MT_VERSION "1.1.0"
 // Bumped whenever game-to-game messages change shape. Peers with a different
 // value are refused by the companion before they ever reach the game.
-#macro MT_PROTO 1
+#macro MT_PROTO 2
 #macro MT_CONFIG_VERSION 2
 
 #macro MT_TO_ALL -1
@@ -40,6 +40,7 @@ function __mt_rt() {
             outbox: [],
             game_dirty: true,
             game_written_frame: -100000,
+            jump_allowed: false,
 
             // --- session (MtNet.gml) ---
             online: false,      // welcomed by a hub

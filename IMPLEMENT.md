@@ -15,7 +15,7 @@ to fail before the feature code is written.**
 | --- | --- | --- |
 | shipped | Remote players, snapshot + live farm sync, host time/weather, multiplayer menu, background companion, LAN discovery (v1.1.0) | done |
 | 0 | Test suite | in progress (0.1, 0.3 done; 0.2, 0.4, 0.5 partly) |
-| 1 | Session clock and host pause | not started |
+| 1 | Session clock and host pause | done (spikes folded in; 1.7 asserted to 2:00 only) |
 | 2 | Group day end | not started |
 | 3 | Farmhand saves | not started |
 | 4 | Money and shipping | not started |
@@ -266,7 +266,7 @@ the session is paused or a night is running; guests receive it. Every machine
 keeps its local `CLOCK.time` close to `st`, but only when its own game is not
 paused. Local pauses therefore freeze the local world and catch up afterwards.
 
-- [ ] **1.1 Scenarios first** (`clock_*`):
+- [x] **1.1 Scenarios first** (`clock_*`):
   - `clock_host_menu`: host opens a pausing menu for 5 s; the guest's clock
     keeps advancing during it; after the host closes it both clocks are
     within 2 game minutes.
@@ -278,13 +278,13 @@ paused. Local pauses therefore freeze the local world and catch up afterwards.
     unchanged on both.
   - `clock_solo_unchanged`: with no guest online the host's menu pauses its
     clock exactly as in single player.
-- [ ] **1.2 Host session time** (`MtWorld.gml`): fields `st`, `st_paused`,
+- [x] **1.2 Host session time** (`MtWorld.gml`): fields `st`, `st_paused`,
   `st_night`. Each tick on the host, if a guest is online and not paused and
   not in a night: `st += GAME_SECONDS_PER_FRAME` (macro in
   `scripts/GameplaySystems/TimeSeasons/Clock.gml:1`), capped at `hours(26)`.
   When no guest is online, `st = CLOCK.time` (single-player behaviour). When
   the first guest joins, `st = CLOCK.time`.
-- [ ] **1.3 Local clock follows** (all machines): replace the current
+- [x] **1.3 Local clock follows** (all machines): replace the current
   `mt_world_filter_time_advance` logic. While online with others, the
   `clock.time_advance` filter returns `0` (the local clock no longer
   self-advances); in the tick, when `!game_paused()`: if `st - CLOCK.time` is
@@ -292,32 +292,32 @@ paused. Local pauses therefore freeze the local world and catch up afterwards.
   original jump (from 1.4) with `st`; never move the clock backwards by more
   than the tolerance; if the local clock is ahead by more than 120, leave it
   until `st` catches up. Use the spike result for the hitch threshold.
-- [ ] **1.4 Wrap `CLOCK.jump`** (pattern from `spike_clock_jump_wrap`): while
+- [x] **1.4 Wrap `CLOCK.jump`** (pattern from `spike_clock_jump_wrap`): while
   online with others, calls not made by the mod are ignored (log at debug).
   Callers that are affected (all verified): timed recipes
   (`scripts/GameplaySystems/Recipe.gml`, `CLOCK.jump(CLOCK.time + count)`),
   scene `end_time_jump` (`Mist.gml:944`), oversleep
   (`AriUtils.gml`, `OVERSLEEP_TIME_TARGET`).
-- [ ] **1.5 Message.** Extend `tm` (host -> all, every 30 frames and on
+- [x] **1.5 Message.** Extend `tm` (host -> all, every 30 frames and on
   change): `{ t:"tm", cal, st, pz, night, w, fc }`. `pz` is now only the
   host's explicit pause. Guests extrapolate `st` between messages by adding
   the per-frame amount while `pz == 0`. Bump `MT_PROTO`.
-- [ ] **1.6 Host pause UI** (`MtMenu.gml`): in the F9 status view, host only:
+- [x] **1.6 Host pause UI** (`MtMenu.gml`): in the F9 status view, host only:
   "Pause game" / "Resume game". HUD shows "Paused by <host>" for everyone
   (`MtUi.gml`). While paused, each game also sets its local
   `CLOCK.time_stopped`-independent freeze by returning 0 from the filter (the
   world keeps animating; only time stops, as in Stardew).
-- [ ] **1.7 2:00.** No extra code: every machine's `should_faint`
+- [x] **1.7 2:00.** No extra code: every machine's `should_faint`
   (`objects/characters/obj_ari.gml:1383`) fires when its clock reaches
   `hours(26)`; with the clock following `st` that happens together. Add
   scenario `clock_two_am` (set `st` to 25:59 on the host; both players faint;
   hand-off to Phase 2 is asserted there).
-- [ ] **1.8 Day length.** The host's day-length setting decides the pace:
+- [x] **1.8 Day length.** The host's day-length setting decides the pace:
   add `mpd` (the host's `MINUTES_PER_DAY`, `scripts/GameplaySystems/TimeSeasons/Time.gml`)
   to `tm`; guests set their `MINUTES_PER_DAY` to it while online and restore
   their own value on disconnect. Scenario `clock_day_length`: host on a
   slower setting; after 30 s both clocks have advanced by the host's amount.
-- [ ] **Done when:** the six scenarios pass and Phase 0.3 still passes.
+- [x] **Done when:** the six scenarios pass and Phase 0.3 still passes.
 
 ## Phase 2: Group day end
 
@@ -784,6 +784,14 @@ Checked against game v1.0.8 scripts. Paths are under `assets/gml/`.
 ### Spike results
 
 _(Filled in by Phase 0.5.)_
+
+Found while building Phase 1 (no separate spike needed):
+- Wrapping works: `CLOCK.jump = method(CLOCK, fn)` with the original kept in
+  `CLOCK.__mt_jump`; re-applied each tick when the marker is missing.
+  Verified by `clock_no_skip`.
+- The `clock.time_advance` filter returning `0` stops the local clock fully;
+  setting `CLOCK.time` directly each frame keeps it on session time.
+- Location ids are strings such as `farm` and `player_home`.
 
 ## Message reference
 

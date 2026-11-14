@@ -112,9 +112,33 @@ function mt_dev_run(_cmd) {
             _val = { lines: mt_sync_digest(_cmd[$ "scope"] ?? "near", _cmd[$ "radius"] ?? 14) };
             break;
         case "clock":
-            // Move the local clock (forward only, like the game's own jump).
-            if (_cmd[$ "set"] != undefined) { CLOCK.jump(_cmd.set); }
-            _val = { clk: CLOCK.time, cal: CALENDAR.time, paused: game_paused() };
+            // set: move session time (host) or the local clock (forward only);
+            // jump: call CLOCK.jump as the game would (wrapped while online);
+            // st: set session time directly on the host.
+            var _w = mt_world_state();
+            if (_cmd[$ "set"] != undefined) {
+                if (mt_is_host() && _w.st_active) { _w.st = _cmd.set; _w.time_sent_frame = -100000; }
+                else { mt_clock_jump_real(_cmd.set); }
+            }
+            if (_cmd[$ "jump"] != undefined) { CLOCK.jump(_cmd.jump); }
+            _val = {
+                clk: CLOCK.time, cal: CALENDAR.time, paused: game_paused(),
+                st: floor(_w.st), st_paused: mt_world_paused_by_host(), driven: mt_world_clock_driven(),
+                mpd: MINUTES_PER_DAY,
+            };
+            break;
+        case "host_pause":
+            mt_world_set_pause(_cmd.on == true);
+            break;
+        case "menu_open":
+            // Freeze only this game, as an open menu does.
+            PAUSE_STATUS = PAUSE_STATUS | PauseStatus.MENU;
+            break;
+        case "menu_close":
+            PAUSE_STATUS = remove_flag(PAUSE_STATUS, PauseStatus.MENU);
+            break;
+        case "setmpd":
+            MINUTES_PER_DAY = _cmd.value;
             break;
         case "gold_get":
             _val = { gold: ARI.gold };

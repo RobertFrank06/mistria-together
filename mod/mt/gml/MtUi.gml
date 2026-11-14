@@ -68,6 +68,7 @@ function mt_ui_draw_gui(_scale) {
     try {
         var _s = is_numeric(_scale) ? _scale : 1;
         var _lines = [mt_ui_status_line()];
+        if (_rt.online && mt_world_paused_by_host()) { array_push(_lines, "Paused by " + (mt_is_host() ? string(ARI.name) : mt_peer_name(_rt.host_id))); }
         if (_rt.online) {
             var _ids = _rt.peer_ids;
             for (var _i = 0; _i < array_length(_ids); _i++) {

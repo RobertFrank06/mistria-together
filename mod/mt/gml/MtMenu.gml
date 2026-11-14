@@ -216,6 +216,10 @@ function mt_menu_open() {
             : "You join " + string(_link[$ "addr"]) + " as soon as you load a save.";
     }
     var _status = popup_creator(mt_menu_text("Multiplayer"), mt_menu_text(_text));
+    if (mt_is_host() && _rt.online) {
+        var _paused = mt_world_state().st_paused;
+        _status.create_button(mt_menu_text(_paused ? "Resume game" : "Pause game"), mt_menu_toggle_pause);
+    }
     _status.create_button(mt_menu_text("Settings"), mt_menu_settings);
     _status.create_button(mt_menu_text("Disconnect"), mt_menu_on_disconnect);
     _status.spawn();
@@ -242,6 +246,10 @@ function mt_menu_on_host() {
     if (!mt_in_world()) {
         mt_menu_notice("Multiplayer", "Hosting starts as soon as you load a save. Others on your network will find you by themselves; over the internet they need your address.");
     }
+}
+
+function mt_menu_toggle_pause(_unused = 0) {
+    mt_world_set_pause(!mt_world_state().st_paused);
 }
 
 function mt_menu_on_disconnect() {

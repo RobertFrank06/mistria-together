@@ -19,6 +19,8 @@ import gametest.scenarios as scen_pkg  # noqa: E402
 def load_all():
     out = {}
     for m in pkgutil.iter_modules(scen_pkg.__path__):
+        if m.name.startswith("_"):
+            continue
         mod = importlib.import_module(f"gametest.scenarios.{m.name}")
         out[getattr(mod, "NAME", m.name)] = mod
     return out
