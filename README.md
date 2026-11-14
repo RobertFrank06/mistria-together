@@ -19,7 +19,7 @@ It has two parts:
 | One shared farm | Guests load the host's world when they join and again every morning. In between, changes are shared live in both directions: objects placed, removed or damaged, soil tilled and watered, chest contents. Items dropped on the ground are visible to everyone in that place, and only one player can pick one up. A chest or the shipping bin is open for one player at a time. |
 | Shared time | One session clock. A menu, shop or scene only freezes your own game; it catches up when it closes. Time-skipping actions (timed recipes, scene time jumps, oversleeping) do not move the session clock. The host can pause the game for everyone from the `F9` menu. The host's day length applies to everybody. |
 | Group day end | Going to bed means "I am ready". The night starts when every online player is ready (in bed, or passed out and waiting at their overnight summary). At 2:00 everyone passes out. A player who leaves stops counting. |
-| Farmhands | Join from the title screen. Your character is a dedicated save on your own computer for that farm, created the first time you join; your solo saves are never touched. |
+| Farmhands | Join from the title screen. Your character is a dedicated save on your own computer for that farm, created the first time you join (you pick a name, then the game's character creation opens in the world); your solo saves are never touched. |
 | Money | Separate wallets by default: the shipping bin's value is totalled by the host and split evenly between the players online. The host can switch to a shared wallet from the `F9` menu (takes effect the next morning). |
 | Shared progress | Museum donations (a completed set rewards every player online), the deepest mine floor reached, world unlocks (bridges, repaired places) and animal care are shared. |
 | Mines (experimental) | A host setting shares mine floors: players on the same floor see the same layout and share breakable objects. Monsters and their drops are still each player's own. |
@@ -29,7 +29,6 @@ It has two parts:
 ## What does not (yet)
 
 - Each player keeps their own inventory, skills, relationships and story progress.
-- A new farmhand picks a name and gets default looks; there is no character creation screen yet.
 - Mounts and pets of other players are not drawn. NPCs, wild animals and monsters are simulated by each game on its own.
 - Buildings placed during a day reach the other players with the next morning's snapshot.
 - Items dropped in a place nobody else is in are not arbitrated until someone enters.

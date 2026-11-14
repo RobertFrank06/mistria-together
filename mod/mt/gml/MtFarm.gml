@@ -249,9 +249,31 @@ function mt_farm_enter_continue(_addr, _info, _path) {
 
 // --- refusals ----------------------------------------------------------------------
 
+// A brand-new farmhand starts with default looks: offer the game's own
+// character creation once the player exists (it cannot run at the title).
+function mt_farm_offer_customization() {
+    var _f = mt_farm_state();
+    if (!is_struct(_f.pending) || _f.pending[$ "role"] != "farmhand" || _f[$ "customized"] == true) { return; }
+    _f.customized = true;
+    new_chain()
+        .join(LinkId.Timer, 150)
+        .append(LinkId.Function, mt_farm_open_customization);
+}
+
+function mt_farm_open_customization() {
+    try {
+        if (!mt_in_world() || ANCHOR.get_menu(Menu.Customization) != undefined) { return; }
+        var _preset = ARI.presets.first();
+        start_character_creation(_preset, function() { mt_log("farmhand look chosen"); });
+    } catch (_e) {
+        mmapi_warn_rate_limited("mt_farm_custom", MT_MOD, "could not open character creation: " + string(_e));
+    }
+}
+
 // First frame in a world: a farmhand save can only be played through Join.
 function mt_farm_on_world_entered() {
     var _f = mt_farm_state();
+    mt_farm_offer_customization();
     if (mt_farm_is_farmhand() && _f.joining != mt_farm_tag_id()) {
         _f.notice = "This save belongs to another player's farm. Join that farm from the Multiplayer menu to play it.";
         mt_log("farmhand save loaded outside a join: back to the title");
@@ -264,6 +286,7 @@ function mt_farm_on_title() {
     var _f = mt_farm_state();
     _f.tag = undefined;
     _f.pending = undefined;
+    _f.customized = false;
     _f.joining = "";
     mt_log("title entered, notice pending: " + string(_f.notice != ""));
     if (_f.notice != "") {

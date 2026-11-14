@@ -268,6 +268,16 @@ function mt_dev_run(_cmd) {
                 }
             }
             break;
+        case "customization_state":
+            _val = { open: ANCHOR.get_menu(Menu.Customization) != undefined };
+            break;
+        case "customization_close":
+            var _cm = ANCHOR.get_menu(Menu.Customization);
+            if (_cm != undefined) {
+                _cm.close();
+                try { ANCHOR.free_node(_cm.continue_button); } catch (_ce) {}
+            }
+            break;
         case "selftest":
             // Pure-logic checks, run inside the real game (see tools/gametest scenario unit_pure_logic).
             _val = { results: [] };

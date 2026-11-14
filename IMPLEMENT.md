@@ -487,9 +487,9 @@ identifier before any save is loaded, then loads or creates that save.
 - [x] **Done when:** all `farmhand_*` scenarios and the earlier suite pass;
   README install/play text is updated for the new Join flow.
 
-**Deviations (decided while building):** character creation is a name prompt
-with default looks (the game's customization menu needs a live player, which
-does not exist at the title); the save guard vetoes only before the host's
+**Deviations (decided while building):** character creation is a name prompt at the
+title (the game's customization menu needs a live player), then the game's own
+creation menu is opened once the farmhand is in the world; the save guard vetoes only before the host's
 world is adopted (a night-end autosave while a snapshot is pending must be
 allowed, or a farmhand's first night would never be saved); `hi` carries the
 host's `fid` (`MT_PROTO` 3); LAN beacons and `Hello` carry the farm id and name
