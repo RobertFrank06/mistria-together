@@ -245,6 +245,20 @@ function mt_dev_run(_cmd) {
                 }
             }
             break;
+        case "selftest":
+            // Pure-logic checks, run inside the real game (see tools/gametest scenario unit_pure_logic).
+            _val = { results: [] };
+            var _r = _val.results;
+            array_push(_r, { name: "all_ready_yes", ok: mt_night_all_ready([1, 2, 3], [3, 1, 2]) });
+            array_push(_r, { name: "all_ready_missing", ok: !mt_night_all_ready([1, 2, 3], [1, 2]) });
+            array_push(_r, { name: "all_ready_empty", ok: !mt_night_all_ready([], [1]) });
+            array_push(_r, { name: "all_ready_extra_ids_ignored", ok: mt_night_all_ready([1, 2], [1, 2, 9]) });
+            var _sp = mt_money_split(201, [1, 2], 1);
+            array_push(_r, { name: "split_odd_to_host", ok: _sp[$ "1"] == 101 && _sp[$ "2"] == 100 });
+            var _sp3 = mt_money_split(10, [1, 2, 3], 2);
+            array_push(_r, { name: "split_three_total", ok: _sp3[$ "1"] + _sp3[$ "2"] + _sp3[$ "3"] == 10 && _sp3[$ "2"] == 4 });
+            array_push(_r, { name: "split_none", ok: array_length(struct_get_names(mt_money_split(5, [], 1))) == 0 });
+            break;
         case "scene_flag":
             // As a story scene does: the cutscene pause flag.
             if (_cmd.on == true) { PAUSE_STATUS = PAUSE_STATUS | PauseStatus.CUTSCENE; }

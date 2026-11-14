@@ -31,6 +31,7 @@ function mt_night_reset() {
         popup_text: "",
         no_popup_frames: 0,
         locked: false,      // we locked the summary's button
+        morning: undefined, // guest: waiting for the host's morning { applied, frames, popup }
         ready: {},          // host: id -> { held }
         ready_ids: [],      // everyone: last ns
         total: 0,
@@ -262,6 +263,7 @@ function mt_night_tick() {
             if (_n.no_popup_frames > 10) { _n.popup = undefined; mt_night_get_up(); }
         } else { _n.no_popup_frames = 0; }
     }
+    mt_night_tick_morning();
     var _eod = ANCHOR.get_menu(Menu.Eod);
     if (_eod == undefined) { return; }
     if (_n.gate_open) { return; }
@@ -284,9 +286,11 @@ function mt_night_on_new_day(_ctx) {
     var _rt = __mt_rt();
     if (!_rt.online) { return; }
     var _n = mt_night_state();
+    var _was_night = _n.gate_open;
     if (!_n.gate_open && array_length(_rt.peer_ids) > 0) {
         mt_warn("the day ended without the group's night; falling back to the host's world");
     }
+    if (!mt_is_host() && _was_night && array_length(_rt.peer_ids) > 0) { mt_night_wait_morning(); }
     mt_night_close_popup(_n);
     _n.bed = false;
     _n.held = false;
@@ -295,6 +299,29 @@ function mt_night_on_new_day(_ctx) {
     _n.ready = {};
     _n.ready_ids = [];
     if (mt_is_host()) { mt_send(MT_TO_ALL, { t: "ns", ready: [], total: array_length(_rt.peer_ids) + 1 }); }
+}
+
+// A guest's own night is over; its morning is the host's. Wait for it.
+function mt_night_wait_morning() {
+    var _n = mt_night_state();
+    var _popup = undefined;
+    try {
+        _popup = popup_creator(mt_menu_text("Good morning"), mt_menu_text("Waiting for the host's morning..."));
+        _popup.create_button(mt_menu_text("OK"));
+        _popup.spawn();
+    } catch (_e) { _popup = undefined; }
+    _n.morning = { applied: mt_sync_state().applied, frames: 0, popup: _popup };
+}
+
+function mt_night_tick_morning() {
+    var _n = mt_night_state();
+    var _m = _n.morning;
+    if (_m == undefined) { return; }
+    _m.frames += 1;
+    if (mt_sync_state().applied > _m.applied || _m.frames > 900) {
+        try { if (_m.popup != undefined) { _m.popup.close(); } } catch (_e) {}
+        _n.morning = undefined;
+    }
 }
 
 // A player left: they no longer count, and the night may start without them.

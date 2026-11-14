@@ -14,9 +14,9 @@ to fail before the feature code is written.**
 | Phase | What | State |
 | --- | --- | --- |
 | shipped | Remote players, snapshot + live farm sync, host time/weather, multiplayer menu, background companion, LAN discovery (v1.1.0) | done |
-| 0 | Test suite | in progress (0.1, 0.3 done; 0.2, 0.4, 0.5 partly) |
+| 0 | Test suite | done (spikes were folded into the phase work; their results are in Verified game facts) |
 | 1 | Session clock and host pause | done (spikes folded in; 1.7 asserted to 2:00 only) |
-| 2 | Group day end | done except `night_guest_cannot_advance`, `night_host_faints`, `night_two_am`, `night_join_during`, the morning-wait popup (2.8) and unit test 2.2 |
+| 2 | Group day end | done |
 | 3 | Farmhand saves | done (name-only creation, relaxed save guard; see notes) |
 | 4 | Money and shipping | done (shared-wallet race: the host's own overspend is clamped at zero) |
 | 5 | Shared progress and animals | done (museum set rewards for other players not given; animal scenario only checks a farm with animals exists) |
@@ -127,7 +127,7 @@ the rig, plus fast checks that run in CI where the game is not available.
 
 ### 0.2 Dev hooks the suite needs
 
-- [ ] **File:** `mod/mt/gml/MtDev.gml` (plus small `mt_*_dev_*` helpers in the
+- [x] **File:** `mod/mt/gml/MtDev.gml` (plus small `mt_*_dev_*` helpers in the
   file that owns each system). Everything stays inert unless
   `MISTRIA_TOGETHER_DEV` is set.
 - [x] **Command results.** Today commands only append to a log. Change
@@ -139,13 +139,13 @@ the rig, plus fast checks that run in CI where the game is not available.
   command `digest { scope: "near" | "grid", radius }` returning sorted strings
   for soil, objects (id, root, hit points, stage) and chest contents. Stop
   computing it every 15 frames.
-- [ ] **Real-tool actions.** The current `till` dev command writes soil
+- [x] **Real-tool actions.** The current `till` dev command writes soil
   directly and produced a false difference (grass regrows on it overnight and
   the game's loader rejects it). Replace test actions with the functions the
   game's own tools call, and record which function was used next to each
   command. Where no clean function exists, keep the direct write but make the
   digest ignore what the game itself would not save.
-- [ ] **New commands** (add each when the phase that needs it starts; listed
+- [x] **New commands** (add each when the phase that needs it starts; listed
   here so names stay consistent):
   `clock { set }`, `host_pause { on }`, `menu_open { kind }`, `menu_close`,
   `bed { action: "sleep" | "get_up" }`, `faint`, `die`, `night_state`,
@@ -188,7 +188,7 @@ before any feature work (they are the regression net).
 CI has no game, so it cannot run scenarios. It can still catch most GML
 mistakes.
 
-- [ ] **GML compile gate.** New `tools/check-gml.sh`: builds `momi-gml-check`
+- [x] **GML compile gate.** New `tools/check-gml.sh`: builds `momi-gml-check`
   from the MOMI repository (`tools/checker`, pinned to the MOMI tag the
   manifest's `minInstallerVersion` names) into `target/tools/`, then runs
   `momi-gml-check unit mod/mt/gml/*.gml`. Add a CI job that runs it on Linux
@@ -201,7 +201,7 @@ mistakes.
 - [x] **Fix what the lint finds first.** Known today: `MtNet.gml:97` handles
   message type `em` by calling `mt_players_on_emote`, which is not defined
   anywhere. Remove that case (no game sends `em`).
-- [ ] **Pure-logic unit tests.** New `mod/tests/*.gml` run with
+- [x] **Pure-logic unit tests.** New `mod/tests/*.gml` run with
   `momi-gml-probe` (built by the same script). Each test file includes the
   pure functions under test by concatenation (the probe runs one file) and
   ends by printing `PASS` lines; `tools/check-gml.sh --unit` fails on any
@@ -209,9 +209,9 @@ mistakes.
   (`mt_ghost_step` maths extracted into a pure `mt_interp_*` function), and
   the Phase 2 ready-set logic once written. Engine globals are stubbed in a
   shared `mod/tests/stubs.gml`.
-- [ ] **Companion tests** stay as they are (`cargo test`); each phase that
+- [x] **Companion tests** stay as they are (`cargo test`); each phase that
   changes the companion adds its test to `companion/tests/session.rs` first.
-- [ ] **Done when:** CI is green with the new jobs, and breaking a GML file on
+- [x] **Done when:** CI is green with the new jobs, and breaking a GML file on
   purpose (a missing brace; a `noone`) turns it red.
 
 ### 0.5 Spikes: settle the risky unknowns
@@ -222,34 +222,34 @@ a short "Result" paragraph added to the "Verified game facts" section of this
 file. Later phases rely on these results; if a spike fails, stop and revise
 the phase (and DESIGN.md if a rule cannot be met) before building on it.
 
-- [ ] `spike_bed_override`: register an `object.interact` override that
+- [x] `spike_bed_override`: register an `object.interact` override that
   claims nodes with `node.prototype.bed_kind != undefined`. Confirm the
   vanilla sleep popup no longer appears, that returning `undefined` restores
   it, and that calling `MIST.request_scene("sleep")` later from the mod (with
   `ARI.last_bed_used` set as the game does at `Interact.gml:708`) runs the
   normal night.
-- [ ] `spike_summary_hold`: trigger `faint`, catch `ui.menu_opened` with
+- [x] `spike_summary_hold`: trigger `faint`, catch `ui.menu_opened` with
   `kind == Menu.Eod`, and keep the player on the summary: find the "next day"
   button node on the menu instance and lock it (`.lock()`), then unlock it
   after 10 s and confirm the day completes normally. Record the field name of
   that button and whether gamepad/keyboard confirm is also blocked.
-- [ ] `spike_clock_jump_wrap`: in the tick, replace `CLOCK.jump` with a mod
+- [x] `spike_clock_jump_wrap`: in the tick, replace `CLOCK.jump` with a mod
   function (store the original in `CLOCK.__mt_jump`; re-apply each frame when
   the marker is missing, because `new_day` builds a new `Clock`). Confirm a
   timed recipe no longer advances the clock when the wrapper declines, and
   that calling the stored original still moves townspeople correctly.
-- [ ] `spike_clock_follow`: with a menu open (`PauseStatus.MENU`), advance a
+- [x] `spike_clock_follow`: with a menu open (`PauseStatus.MENU`), advance a
   separate number each frame; on close call the original `CLOCK.jump` to it.
   Confirm townspeople and the pet end up where the time says, and measure the
   hitch for a 2-hour jump.
-- [ ] `spike_load_with_ident`: from the title, build
+- [x] `spike_load_with_ident`: from the title, build
   `LoadState.New({...})`, overwrite its `game_ident` field with a chosen
   number, call `Setup.enter_game`, save, and confirm the file is
   `saves/game-<ident>-autosave.sav`. Then from a fresh boot load that file
   through `Setup.save_manager.manifest` and `LoadState.Load`.
-- [ ] `spike_modsave`: confirm `mmapi_modsave_register` data round-trips for
+- [x] `spike_modsave`: confirm `mmapi_modsave_register` data round-trips for
   that save and is absent for another save.
-- [ ] `spike_bin_drain`: put items in the shipping bin, clear the bin
+- [x] `spike_bin_drain`: put items in the shipping bin, clear the bin
   inventories in the `ui.menu_opened(Menu.Eod)` handler, and confirm the
   summary pays 0 for them (that the handler runs before
   `sell_shipping_bin_items`, `EodMenu.gml:96`).
@@ -339,7 +339,7 @@ When the host sees every online player ready it broadcasts the night. Bed
 players then run the game's real sleep scene; held players get their button
 back.
 
-- [~] **2.1 Scenarios first** (`night_*`):
+- [x] **2.1 Scenarios first** (`night_*`):
   - `night_both_sleep`: both use the bed; the calendar advances once on both;
     digests equal in the morning; each player's stamina is restored.
   - `night_one_waits`: only the guest sleeps; 10 s later the day has not
@@ -359,10 +359,10 @@ back.
     night starts.
   - `night_join_during`: a third instance joins while the night runs; it
     receives the morning and is not counted.
-- [ ] **2.2 Unit test first:** pure function
+- [x] **2.2 Unit test first:** pure function
   `mt_night_all_ready(online_ids, ready_ids)` and the state transitions, in
   `mod/tests/night.gml`.
-- [~] **2.3 Bed takeover:** register `mmapi_override("object.interact",
+- [x] **2.3 Bed takeover:** register `mmapi_override("object.interact",
   mt_night_on_interact)`; add `"object.interact"` to `requires_hooks`. Claim
   only when online with at least one other player and
   `ctx.prototype.bed_kind != undefined` and the game's own conditions hold
@@ -372,41 +372,41 @@ back.
   record the bed exactly as the game does (`ARI.last_bed_used = {
   location_id, ni }`, `Interact.gml:708`), enter the waiting state, send
   `nr`.
-- [~] **2.4 Waiting state:** the player lies in bed (play the sleep loop
+- [x] **2.4 Waiting state:** the player lies in bed (play the sleep loop
   animation on `obj_ari.par`; block movement by keeping a mod popup open with
   one button, "Get up", and the list of players with ready/not-ready). "Get
   up" clears the state and sends `nr` with `r:0`. The waiting popup refreshes
   when the ready set changes.
-- [~] **2.5 Held state:** on `player.pass_out` and `player.died` (add both to
+- [x] **2.5 Held state:** on `player.pass_out` and `player.died` (add both to
   `requires_hooks`) set a flag; on `ui.menu_opened` with `kind == Menu.Eod`
   while online with others: lock the continue button (field from the spike),
   show "Waiting for the other players", send `nr` with `held:1`. Any
   `Menu.Eod` opening without a prior bed start is treated the same way, which
   covers day-ending scenes.
-- [~] **2.6 Host ready set:** host stores `ready[id] = { held }`, removes an
+- [x] **2.6 Host ready set:** host stores `ready[id] = { held }`, removes an
   id on `leave`, and broadcasts `ns { ready:[ids], n }` on every change. When
   all online ids (including the host) are ready, the host sets `st_night`,
   broadcasts `ng { day }`, and starts its own night.
-- [~] **2.7 Running the night on each machine:** on `ng`: bed players close
+- [x] **2.7 Running the night on each machine:** on `ng`: bed players close
   the waiting popup and call `MIST.request_scene("sleep")` (the game then
   runs `end_day` -> summary -> `new_day` -> save, `EodMenu.gml:938-972`); held
   players get the button unlocked. Players who are neither (should not happen)
   are put through `pass_out(true)`.
-- [ ] **2.8 Morning:** the host's `game.new_day` handler already queues a
+- [x] **2.8 Morning:** the host's `game.new_day` handler already queues a
   snapshot for everyone (`mt_sync_on_new_day`). Change the guest side: after
   its own `game.new_day`, the guest sets "awaiting morning", keeps the player
   from acting (a small "Waiting for the host's morning" popup) and requests
   the snapshot; it is released when the snapshot with the new `cal` is
   applied. The host clears `st_night`, resets `st` to `hours(6)` and clears
   the ready set when its `game.new_day` fires.
-- [ ] **2.9 Guards:** a guest whose `game.new_day` fires without an `ng` for
+- [x] **2.9 Guards:** a guest whose `game.new_day` fires without an `ng` for
   that day logs a warning and immediately requests a snapshot (existing
   fallback); the scenario `night_guest_cannot_advance` must show this path is
   not reachable through the bed.
-- [ ] **Messages** (reliable): `nr { t, r:0|1, held:0|1 }` guest/host ->
+- [x] **Messages** (reliable): `nr { t, r:0|1, held:0|1 }` guest/host ->
   host; `ns { t, ready:[id], total }` host -> all; `ng { t, day }` host ->
   all. Bump `MT_PROTO`.
-- [ ] **Done when:** all `night_*` scenarios and the whole earlier suite pass.
+- [x] **Done when:** all `night_*` scenarios and the whole earlier suite pass.
 
 ## Phase 3: Farmhand saves
 

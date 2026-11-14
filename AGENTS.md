@@ -50,6 +50,7 @@ cargo test --workspace --all-features --locked
 cargo build --release --locked
 tools/package-mod.sh /tmp/mistria-together-package-check
 python3 tools/lint-gml.py
+tools/check-gml.sh   # needs MOMI's momi-gml-check; see the script header
 ```
 
 The game rig requires a local Linux game install and MOMI. Run

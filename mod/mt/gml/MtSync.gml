@@ -870,16 +870,17 @@ function mt_sync_dev_command(_cmd) {
     var _y = (_cmd[$ "y"] ?? (_cy + 2));
     switch (_cmd[$ "cmd"]) {
         case "till":
-            GRID.write_ground(_x, _y, GroundKind.Soil);
+            // The hoe: the game's own hoe_node. It only works on dirt, so bare
+            // grass is first made dirt (a plain ground write the game saves).
+            if (GRID.node_terrain_ground_kind[GRID.node_index_for_cell(_x, _y)] == GroundKind.Grass) {
+                GRID.write_ground(_x, _y, GroundKind.Dirt);
+            }
+            // The tool plays a sound through a "doppel"; a silent stand-in does here.
+            _val = { tilled: hoe_node(GRID, _x, _y, { play_good: function(_sfx) {} }) };
             break;
         case "water":
-            var _ni = GRID.node_index_for_cell((_x div 2) * 2, (_y div 2) * 2);
-            var _w = GRID.dims.x;
-            GRID.node_terrain_is_watered[_ni] = true;
-            GRID.node_terrain_is_watered[_ni + 1] = true;
-            GRID.node_terrain_is_watered[_ni + _w] = true;
-            GRID.node_terrain_is_watered[_ni + _w + 1] = true;
-            GRID.update_tilemap_for_node((_x div 2) * 2, (_y div 2) * 2);
+            // The watering can: the game's own water_node.
+            _val = { watered: water_node(GRID, (_x div 2) * 2, (_y div 2) * 2) };
             break;
         case "put":
             GRID.write_node(_x, _y, string_to_object_id(_cmd.object));
