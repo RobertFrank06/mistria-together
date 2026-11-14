@@ -12,7 +12,7 @@
 #macro MT_VERSION "1.1.0"
 // Bumped whenever game-to-game messages change shape. Peers with a different
 // value are refused by the companion before they ever reach the game.
-#macro MT_PROTO 6
+#macro MT_PROTO 7
 #macro MT_CONFIG_VERSION 2
 
 #macro MT_TO_ALL -1
@@ -197,6 +197,7 @@ function mt_register() {
     mmapi_on("ui.draw_gui", mt_ui_draw_gui);
     mmapi_on("game.new_day", mt_world_on_new_day);
     mmapi_on("museum.donate_item", mt_progress_on_donate);
+    mmapi_on("items.dropped", mt_items_on_dropped);
     mmapi_override("object.interact", mt_night_on_interact);
     mmapi_filter("player.gold_delta", mt_money_filter_gold);
     mmapi_filter("clock.time_advance", mt_world_filter_time_advance);

@@ -222,6 +222,52 @@ function mt_dev_run(_cmd) {
                 array_push(_val.animals, { idx: _an.idx, pat: _an.has_been_pat, eaten: _an.has_eaten });
             }
             break;
+        case "drop":
+            // A player's drop: one turnip stack a little to the right.
+            drop_item([new LiveItem(ItemId.Turnip)], obj_ari.x + 24, obj_ari.y);
+            break;
+        case "items_dbg":
+            _val = mt_items_dev_state();
+            break;
+        case "items_near":
+            _val = { items: [] };
+            var _gids = mt_items_state().by_inst;
+            var _alli = mt_items_all();
+            for (var _ia = 0; _ia < array_length(_alli); _ia++) {
+                var _io = _alli[_ia];
+                array_push(_val.items, { gid: _gids[$ string(_io)] ?? "", x: _io.x, y: _io.y, item: item_id_to_string(_io.item_id) });
+            }
+            break;
+        case "pickup_nearest":
+            // As if the player walked into the closest item.
+            if (!instance_exists(obj_item)) { _val = { ok: false }; break; }
+            var _near = instance_nearest(obj_ari.x, obj_ari.y, obj_item);
+            _near.kill_target = obj_ari.id;
+            _near.kill_timer = 6;
+            _val = { ok: true };
+            break;
+        case "inv_count":
+            var _cnt = 0;
+            for (var _is = 0; _is < ARI.inventory.slots.count(); _is++) {
+                var _sl = ARI.inventory.slots.get(_is);
+                if (_sl.item != undefined && _sl.item.item_id == ItemId.Turnip) { _cnt += _sl.count; }
+            }
+            _val = { count: _cnt };
+            break;
+        case "chest_open":
+            var _cni = mt_sync_find_by_root(GRID, _cmd.x, _cmd.y);
+            if (_cni == undefined) { throw "no object rooted at " + string(_cmd.x) + "," + string(_cmd.y); }
+            var _cnode = GRID.node_parent[_cni];
+            mt_dev_note("chest node: " + string(struct_get_names(_cnode)));
+            try { interact(_cnode); } catch (_ci) { mt_dev_note("interact threw after the call: " + string(_ci)); }
+            break;
+        case "chest_close":
+            var _sm = ANCHOR.get_menu(Menu.Storage);
+            if (_sm != undefined) { _sm.close(); }
+            break;
+        case "chest_state":
+            _val = mt_items_dev_state();
+            break;
         case "wm_enable":
             mt_progress_fulfill_mod(_cmd.i);
             _val = { on: world_mod_enabled(_cmd.i) };

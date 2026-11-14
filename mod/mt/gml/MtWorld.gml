@@ -155,6 +155,7 @@ function mt_world_tick() {
     }
     mt_money_tick();
     mt_progress_tick();
+    mt_items_tick();
     mt_sync_tick();
 }
 
@@ -196,6 +197,10 @@ function mt_world_on_time(_peer, _d) {
 function mt_world_on_message(_peer, _t, _d) {
     if (_t == "tm") {
         mt_world_on_time(_peer, _d);
+        return;
+    }
+    if (_t == "id" || _t == "ic" || _t == "cg" || _t == "cd" || _t == "ix" || _t == "kl" || _t == "kg" || _t == "kd" || _t == "kr") {
+        mt_items_on_message(_peer, _t, _d);
         return;
     }
     if (_t == "mu" || _t == "md" || _t == "an" || _t == "wu") {

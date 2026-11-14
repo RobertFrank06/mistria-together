@@ -10,6 +10,7 @@ requires_hooks = [
     "game.new_day",
     "game.save_guard",
     "game.title_entered",
+    "items.dropped",
     "museum.donate_item",
     "object.interact",
     "player.gold_delta",

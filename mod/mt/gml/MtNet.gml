@@ -73,6 +73,7 @@ function mt_net_reset(_reason) {
     _rt.pose_sent = undefined;
     mt_money_reset();
     mt_progress_reset();
+    mt_items_reset();
     mt_world_reset();
     mt_night_reset();
     if (_was_online) {
@@ -137,6 +138,7 @@ function mt_net_dispatch_system(_t, _d) {
             mt_log("player " + string(_d.id) + " left");
             mt_net_remove_peer(_d.id);
             mt_night_on_leave(_d.id);
+            mt_items_on_leave(_d.id);
             break;
 
         case "bye":

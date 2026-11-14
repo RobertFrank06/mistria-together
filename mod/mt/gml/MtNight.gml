@@ -63,6 +63,8 @@ function mt_night_active() {
 // object.interact override: claim only beds, only while playing together.
 function mt_night_on_interact(_node) {
     if (!mt_night_active()) { return undefined; }
+    var _lock = mt_items_on_interact(_node);
+    if (_lock != undefined) { return _lock; }
     try {
         if (_node.prototype.bed_kind == undefined) { return undefined; }
         if (!is_home_location(CURRENT_LOCATION_ID) || !requirements_pass(Requirement.Sleep)) { return undefined; }

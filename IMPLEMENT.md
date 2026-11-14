@@ -20,7 +20,7 @@ to fail before the feature code is written.**
 | 3 | Farmhand saves | done (name-only creation, relaxed save guard; see notes) |
 | 4 | Money and shipping | done (shared-wallet race: the host's own overspend is clamped at zero) |
 | 5 | Shared progress and animals | done (museum set rewards for other players not given; animal scenario only checks a farm with animals exists) |
-| 6 | Dropped items and chest locking | not started |
+| 6 | Dropped items and chest locking | partial: chest locking passes (`chest_lock`); dropped items are written but `items_drop_visible` and `items_pickup_once` still fail (the item scan hits `expired instance`; the instance reference taken for a tagged drop goes stale) |
 | 7 | Scenes and festivals | not started |
 | 8 | Mines | not started |
 
