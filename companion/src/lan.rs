@@ -27,6 +27,10 @@ struct Beacon {
     port: u16,
     players: u32,
     locked: bool,
+    #[serde(default)]
+    farm_id: String,
+    #[serde(default)]
+    farm: String,
 }
 
 fn reusable_socket(port: u16) -> std::io::Result<UdpSocket> {
@@ -58,7 +62,7 @@ pub async fn listen(published: SharedPublished, own_id: String) {
                 let Ok(b) = serde_json::from_slice::<Beacon>(&buf[..n]) else { continue };
                 if b.app != BEACON_MAGIC || b.id == own_id || b.name.len() > 64 { continue; }
                 let addr = if b.port == crate::proto::DEFAULT_PORT { from.ip().to_string() } else { format!("{}:{}", from.ip(), b.port) };
-                seen.insert(b.id, (LanGame { name: b.name, addr, players: b.players, locked: b.locked }, Instant::now()));
+                seen.insert(b.id, (LanGame { name: b.name, addr, players: b.players, locked: b.locked, farm_id: b.farm_id, farm: b.farm }, Instant::now()));
             }
             _ = tick.tick() => {
                 seen.retain(|_, (_, at)| at.elapsed() < Duration::from_secs(4));
@@ -78,6 +82,7 @@ pub fn announce(
     name: String,
     port: u16,
     locked: bool,
+    farm: (String, String),
     players: Arc<AtomicU32>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -94,6 +99,8 @@ pub fn announce(
                 port,
                 players: players.load(Ordering::Relaxed),
                 locked,
+                farm_id: farm.0.clone(),
+                farm: farm.1.clone(),
             };
             let Ok(bytes) = serde_json::to_vec(&beacon) else {
                 continue;

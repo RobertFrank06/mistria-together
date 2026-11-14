@@ -99,10 +99,58 @@ fn desired_from(control: &Control) -> Desired {
     }
 }
 
+/// `control.json` asking about a farm instead of joining it.
+fn is_query(control: &Control) -> bool {
+    control.mode == "query" && !control.addr.trim().is_empty()
+}
+
+async fn query_hub(addr: &str) -> Result<Info> {
+    let addr = resolve(addr).await?;
+    let mut stream = tokio::time::timeout(Duration::from_secs(6), TcpStream::connect(addr))
+        .await
+        .map_err(|_| anyhow!("no answer from {addr}"))?
+        .map_err(|e| anyhow!("cannot reach {addr}: {e}"))?;
+    write_frame(&mut stream, &Frame::Query).await?;
+    match tokio::time::timeout(Duration::from_secs(8), read_frame(&mut stream)).await {
+        Ok(Ok(Frame::Info(i))) => Ok(i),
+        Ok(Ok(Frame::Bye { reason })) => Err(anyhow!("{reason}")),
+        Ok(Ok(_)) => Err(anyhow!(
+            "unexpected reply (is that a Mistria Together host?)"
+        )),
+        Ok(Err(e)) => Err(anyhow!("{e}")),
+        Err(_) => Err(anyhow!("no reply from {addr}")),
+    }
+}
+
+/// Ask a host about its farm in the background; the answer is published in
+/// `link.json` for the game's menu. Never disturbs a running session.
+fn start_query(published: &SharedPublished, control: &Control) {
+    let addr = control.addr.trim().to_string();
+    {
+        let mut p = published.lock().unwrap();
+        p.info = None;
+        p.info_error.clear();
+        p.info_addr = addr.clone();
+    }
+    let published = published.clone();
+    tokio::spawn(async move {
+        let result = query_hub(&addr).await;
+        let mut p = published.lock().unwrap();
+        if p.info_addr != addr {
+            return; // a newer query replaced this one
+        }
+        match result {
+            Ok(i) => p.info = Some(i),
+            Err(e) => p.info_error = e.to_string(),
+        }
+    });
+}
+
 struct State {
     desired: Desired,
     password: Option<String>,
     game: Option<GameInfo>,
+    published: SharedPublished,
 }
 
 impl State {
@@ -115,6 +163,7 @@ impl State {
     fn apply(&mut self, msg: Option<ToNet>) -> bool {
         match msg {
             Some(ToNet::Game(g)) => self.game = g,
+            Some(ToNet::Control(c)) if is_query(&c) => start_query(&self.published, &c),
             Some(ToNet::Control(c)) => self.apply_control(&c),
             Some(ToNet::Out(_)) => {}
             None => return false,
@@ -133,6 +182,7 @@ pub async fn run(
         desired: opts.initial,
         password: opts.password,
         game: None,
+        published: opts.published.clone(),
     };
     let mut hub: Option<LocalHub> = opts.hub;
     let mut hub_password = st.password.clone();
@@ -250,7 +300,16 @@ pub async fn run(
             "connecting",
             format!("connecting to {}", cfg.hub_addr),
         );
-        match session(&cfg, &info, announce, &mut from_bridge, &to_game).await {
+        match session(
+            &cfg,
+            &info,
+            announce,
+            &mut from_bridge,
+            &to_game,
+            &published,
+        )
+        .await
+        {
             Ended::Stop => return,
             Ended::Game(g) => st.game = g,
             Ended::Control(c) => {
@@ -321,6 +380,8 @@ async fn connect(cfg: &NetConfig, info: &GameInfo) -> Result<(TcpStream, Welcome
         role: cfg.role,
         password: cfg.password.clone(),
         host_key: cfg.host_key.clone(),
+        farm_id: Some(info.farm_id.clone()).filter(|s| !s.is_empty()),
+        farm_name: Some(info.farm_name.clone()).filter(|s| !s.is_empty()),
     });
     write_frame(&mut stream, &hello).await?;
     match tokio::time::timeout(Duration::from_secs(8), read_frame(&mut stream)).await {
@@ -340,6 +401,7 @@ async fn session(
     announce: Option<(String, u16)>,
     from_bridge: &mut UnboundedReceiver<ToNet>,
     to_game: &Sender<ToGame>,
+    published: &SharedPublished,
 ) -> Ended {
     let current = match cfg.role {
         Role::Host if cfg.host_key.is_some() => "host",
@@ -382,7 +444,14 @@ async fn session(
         } else {
             info.name.clone()
         };
-        crate::lan::announce(id, name, port, cfg.password.is_some(), players.clone())
+        crate::lan::announce(
+            id,
+            name,
+            port,
+            cfg.password.is_some(),
+            (info.farm_id.clone(), info.farm_name.clone()),
+            players.clone(),
+        )
     });
 
     // All TCP writes go through one task so big file transfers interleave
@@ -500,6 +569,7 @@ async fn session(
                         let same = g.as_ref().map(|g| g.sid == info.sid && g.ready && g.dir == info.dir).unwrap_or(false);
                         if !same { break Ended::Game(g); }
                     }
+                    Some(ToNet::Control(c)) if is_query(&c) => start_query(published, &c),
                     Some(ToNet::Control(c)) => {
                         // Re-selecting what is already running changes nothing.
                         let wanted = desired_from(&c);

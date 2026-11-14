@@ -39,6 +39,8 @@ struct State {
     host: Option<u8>,
     next_id: u8,
     game_proto: Option<u32>,
+    /// The host's farm, for `Query` (farm id, farm name, host name, mod version).
+    farm: Option<(String, String, String, String)>,
 }
 
 type Shared = Arc<Mutex<State>>;
@@ -257,6 +259,28 @@ async fn serve(
     let (mut rd, mut wr) = stream.into_split();
     let hello = match tokio::time::timeout(Duration::from_secs(8), read_frame(&mut rd)).await {
         Ok(Ok(Frame::Hello(h))) => h,
+        Ok(Ok(Frame::Query)) => {
+            let reply = {
+                let st = state.lock().unwrap();
+                match (&st.farm, st.game_proto) {
+                    (Some((id, farm, host, ver)), Some(proto)) => Ok(Info {
+                        farm_id: id.clone(),
+                        farm_name: farm.clone(),
+                        host_name: host.clone(),
+                        players: st.peers.len() as u32,
+                        game_proto: proto,
+                        mod_version: ver.clone(),
+                        locked: cfg.password.is_some(),
+                    }),
+                    _ => Err("the host is not in the game yet".to_string()),
+                }
+            };
+            let _ = match reply {
+                Ok(info) => write_frame(&mut wr, &Frame::Info(info)).await,
+                Err(reason) => write_frame(&mut wr, &Frame::Bye { reason }).await,
+            };
+            return;
+        }
         _ => return,
     };
 
@@ -404,6 +428,12 @@ fn admit(
     st.game_proto = Some(hello.game_proto);
     if hello.role == Role::Host {
         st.host = Some(id);
+        st.farm = Some((
+            hello.farm_id.clone().unwrap_or_default(),
+            hello.farm_name.clone().unwrap_or_default(),
+            hello.name.clone(),
+            hello.mod_version.clone(),
+        ));
     }
 
     let mut udp_token = random_token();
@@ -467,6 +497,7 @@ fn remove_peer(state: &Shared, id: u8, why: &str) {
     if st.host == Some(id) {
         // The world lives in the host's game: without it there is no session.
         st.host = None;
+        st.farm = None;
         let bye = Arc::new(
             Frame::Bye {
                 reason: "the host left".into(),

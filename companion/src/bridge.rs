@@ -16,6 +16,7 @@
 //! reordered. Runs on its own thread with plain blocking IO.
 
 use crate::log;
+use crate::proto::Info;
 use crate::proto::{TO_ALL, TO_HOST};
 use serde::Deserialize;
 use serde_json::value::RawValue;
@@ -37,6 +38,9 @@ pub struct GameInfo {
     pub name: String,
     pub proto: u32,
     pub mod_version: String,
+    /// The loaded farm's game identifier and name (empty until a save loads).
+    pub farm_id: String,
+    pub farm_name: String,
 }
 
 #[derive(Debug)]
@@ -82,6 +86,8 @@ pub struct LanGame {
     pub addr: String,
     pub players: u32,
     pub locked: bool,
+    pub farm_id: String,
+    pub farm: String,
 }
 
 /// State the network side publishes for the game's menu (via `link.json`).
@@ -90,6 +96,10 @@ pub struct Published {
     pub mode: String,
     pub addr: String,
     pub lan: Vec<LanGame>,
+    /// Answer to the last `query` control: the farm at `info_addr`, or why not.
+    pub info: Option<Info>,
+    pub info_addr: String,
+    pub info_error: String,
 }
 
 pub type SharedPublished = Arc<std::sync::Mutex<Published>>;
@@ -121,6 +131,10 @@ struct GameFile {
     ready: bool,
     #[serde(default)]
     name: String,
+    #[serde(default)]
+    farm_id: String,
+    #[serde(default)]
+    farm: String,
 }
 
 #[derive(Deserialize)]
@@ -395,6 +409,8 @@ impl Bridge {
                 name: g.name,
                 proto: g.proto,
                 mod_version: g.ver,
+                farm_id: g.farm_id,
+                farm_name: g.farm,
             });
         }
 
@@ -574,6 +590,9 @@ impl Bridge {
                 "mode": p.mode,
                 "addr": p.addr,
                 "lan": p.lan,
+                "info": p.info,
+                "info_addr": p.info_addr,
+                "info_error": p.info_error,
             })
             .to_string()
         };

@@ -45,7 +45,7 @@ impl FakeGame {
     /// One "frame": heartbeat, pairing, read inbound batches.
     fn pump(&mut self) {
         self.hb += 1;
-        let game = json!({ "proto": 1, "ver": "test", "sid": self.sid, "hb": self.hb, "ready": self.ready, "name": self.name, "farm": "F" });
+        let game = json!({ "proto": 1, "ver": "test", "sid": self.sid, "hb": self.hb, "ready": self.ready, "name": self.name, "farm": "F", "farm_id": "4242" });
         self.write("game.json", &game.to_string());
         if let Ok(bytes) = std::fs::read(self.dir.join("link.json")) {
             if let Ok(link) = serde_json::from_slice::<Value>(&bytes) {
@@ -424,4 +424,58 @@ async fn driven_from_the_game_menu() {
             && link(&gs[1].dir)["mode"] == "off"
     })
     .await;
+}
+
+/// A game at the title screen (no save loaded, so not ready) can ask a host
+/// about its farm without joining, and a running session is not disturbed.
+#[tokio::test(flavor = "multi_thread")]
+async fn session_info_before_ready() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (hd, gd) = (tmp.path().join("h"), tmp.path().join("g"));
+    let mut h = FakeGame::new(hd.clone(), "InfoHost");
+    let mut g = FakeGame::new(gd.clone(), "Title");
+    g.ready = false;
+    let _hc = menu(&hd).await;
+    let _gc = menu(&gd).await;
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+
+    // Nobody hosts yet: the answer is an error, not a hang.
+    g.write(
+        "control.json",
+        &json!({ "seq": 1, "mode": "query", "addr": format!("127.0.0.1:{port}") }).to_string(),
+    );
+    until(&mut [&mut h, &mut g], "query error", |gs| {
+        !link(&gs[1].dir)["info_error"]
+            .as_str()
+            .unwrap_or("")
+            .is_empty()
+    })
+    .await;
+
+    h.write(
+        "control.json",
+        &json!({ "seq": 1, "mode": "host", "port": port }).to_string(),
+    );
+    until(&mut [&mut h, &mut g], "host online", |gs| {
+        gs[0].inbox.iter().any(|(_, d)| d["t"] == "welcome")
+    })
+    .await;
+    g.write(
+        "control.json",
+        &json!({ "seq": 2, "mode": "query", "addr": format!("127.0.0.1:{port}") }).to_string(),
+    );
+    until(&mut [&mut h, &mut g], "query answer", |gs| {
+        link(&gs[1].dir)["info"]["farm_id"] == "4242"
+    })
+    .await;
+    let info = link(&gd)["info"].clone();
+    assert_eq!(info["farm_name"], "F");
+    assert_eq!(info["host_name"], "InfoHost");
+    assert_eq!(info["players"], 1);
+    // The asker never joined the roster.
+    assert!(g.take("welcome").is_none());
 }

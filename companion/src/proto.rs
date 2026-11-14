@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// Version of the companion <-> hub protocol in this file.
-pub const WIRE_VERSION: u32 = 1;
+pub const WIRE_VERSION: u32 = 2;
 /// Largest frame either side accepts. Blobs are chunked far below this.
 pub const MAX_FRAME: usize = 2 * 1024 * 1024;
 /// Largest payload sent as a single UDP datagram (stays under common MTUs).
@@ -44,6 +44,23 @@ pub struct Hello {
     /// Proves that this client is the one that started an embedded hub.
     #[serde(default)]
     pub host_key: Option<String>,
+    /// Host only: the farm's game identifier and name, for `Info`.
+    #[serde(default)]
+    pub farm_id: Option<String>,
+    #[serde(default)]
+    pub farm_name: Option<String>,
+}
+
+/// What a session tells somebody who asks before joining.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Info {
+    pub farm_id: String,
+    pub farm_name: String,
+    pub host_name: String,
+    pub players: u32,
+    pub game_proto: u32,
+    pub mod_version: String,
+    pub locked: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -118,6 +135,10 @@ pub enum Frame {
         kind: RelayKind,
         payload: Vec<u8>,
     },
+    /// Client to hub, instead of `Hello`: tell me about the farm.
+    Query,
+    /// Hub to client: the answer to `Query`.
+    Info(Info),
 }
 
 const K_HELLO: u8 = 1;
@@ -129,6 +150,8 @@ const K_PING: u8 = 6;
 const K_PONG: u8 = 7;
 const K_STATS: u8 = 8;
 const K_RELAY: u8 = 9;
+const K_QUERY: u8 = 10;
+const K_INFO: u8 = 11;
 
 #[derive(Serialize, Deserialize)]
 struct ByeBody {
@@ -182,6 +205,8 @@ impl Frame {
                     pings: pings.clone(),
                 },
             ),
+            Frame::Query => vec![0, 0, 0, 0, K_QUERY],
+            Frame::Info(i) => json(K_INFO, i),
             Frame::Relay {
                 peer,
                 kind,
@@ -224,6 +249,8 @@ impl Frame {
             K_STATS => Frame::Stats {
                 pings: serde_json::from_slice::<StatsBody>(body)?.pings,
             },
+            K_QUERY => Frame::Query,
+            K_INFO => Frame::Info(serde_json::from_slice(body)?),
             K_RELAY => {
                 if body.len() < 2 {
                     bail!("short relay frame");
@@ -309,6 +336,18 @@ mod tests {
                 role: Role::Guest,
                 password: Some("pw".into()),
                 host_key: None,
+                farm_id: Some("123".into()),
+                farm_name: Some("Farm".into()),
+            }),
+            Frame::Query,
+            Frame::Info(Info {
+                farm_id: "123".into(),
+                farm_name: "Farm".into(),
+                host_name: "H".into(),
+                players: 2,
+                game_proto: 2,
+                mod_version: "1.1.0".into(),
+                locked: false,
             }),
             Frame::Welcome(Welcome {
                 id: 2,
