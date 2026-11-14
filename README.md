@@ -114,7 +114,7 @@ cargo build --release           # target/release/mistria-together
 tools/package-mod.sh            # dist/MistriaTogether-mod.zip
 ```
 
-`tools/rig.sh` and `tools/e2e.sh` (Linux) set up an isolated copy of the game with its own save folder and run two real instances headless under gamescope against each other; `MISTRIA_TOGETHER_DEV` turns on the mod's test hooks (`mod/mt/gml/MtDev.gml`). The rig never touches your real install or saves.
+`tools/rig.sh` (Linux) sets up an isolated copy of the game with its own save folder, and `tools/gametest.py run` drives real instances headless under gamescope against each other through scenario files (`tools/gametest/scenarios/`); `tools/lint-gml.py` checks the mod's GML statically; `MISTRIA_TOGETHER_DEV` turns on the mod's test hooks (`mod/mt/gml/MtDev.gml`). The rig never touches your real install or saves.
 
 Pushing a version tag runs tests and builds release packages for Linux, Windows and macOS. Each package contains the companion, the extracted MOMI mod folder, a convenience mod ZIP, license, and a short first-run guide.
 

@@ -14,7 +14,7 @@ to fail before the feature code is written.**
 | Phase | What | State |
 | --- | --- | --- |
 | shipped | Remote players, snapshot + live farm sync, host time/weather, multiplayer menu, background companion, LAN discovery (v1.1.0) | done |
-| 0 | Test suite | not started |
+| 0 | Test suite | in progress (0.1, 0.3 done; 0.2, 0.4, 0.5 partly) |
 | 1 | Session clock and host pause | not started |
 | 2 | Group day end | not started |
 | 3 | Farmhand saves | not started |
@@ -88,24 +88,24 @@ the rig, plus fast checks that run in CI where the game is not available.
 
 ### 0.1 Scenario runner
 
-- [ ] **Files:** new `tools/gametest.py`, new `tools/gametest/__init__.py`
+- [x] **Files:** new `tools/gametest.py`, new `tools/gametest/__init__.py`
   (helpers), new `tools/gametest/scenarios/`. Python standard library only.
-- [ ] **CLI:** `tools/gametest.py list`, `tools/gametest.py run [name ...]
+- [x] **CLI:** `tools/gametest.py list`, `tools/gametest.py run [name ...]
   [--keep] [--players N] [--timeout S]`. Exit code 0 only if every selected
   scenario passed. Print one line per assertion and a final summary. On
   failure, copy each instance's stdout log, mod log and last `dev_state.json`
   to `$MT_RIG/failures/<scenario>/` and print that path.
-- [ ] **Lifecycle per scenario:** `rig.sh install` once per run (not per
+- [x] **Lifecycle per scenario:** `rig.sh install` once per run (not per
   scenario) -> wipe each instance's `mod_data` and `saves` -> start one
   background companion per instance (`mistria-together daemon --data-dir
   <rig>/<p>/FieldsOfMistria`) -> start instances with
   `MISTRIA_TOGETHER_DEV=new` -> wait until every `dev_state.json` reports
   `in_world: true` -> run the scenario function -> stop everything.
   Reuse `tools/rig.sh` for `install`, `run`, `stop`; do not duplicate it.
-- [ ] **Process hygiene:** start children in their own process group and kill
+- [x] **Process hygiene:** start children in their own process group and kill
   the group in a `finally`. Never use `pkill -f` with a pattern that can match
   the runner's own command line (this killed the shell twice).
-- [ ] **Helper API** (`tools/gametest/__init__.py`), used by all scenarios:
+- [x] **Helper API** (`tools/gametest/__init__.py`), used by all scenarios:
   - `Game(name)` with `.cmd(command: dict) -> dict` (send a dev command, wait
     for and return its result, raise on error or timeout),
     `.state() -> dict`, `.wait(predicate, what, timeout=20)`, `.log()`.
@@ -118,10 +118,10 @@ the rig, plus fast checks that run in CI where the game is not available.
     prints a small diff).
   - `screenshot(game, path)` via `gamescopectl` (best effort, never fails a
     scenario).
-- [ ] **Scenario shape:** each file defines `NAME`, `PLAYERS = 2`,
+- [x] **Scenario shape:** each file defines `NAME`, `PLAYERS = 2`,
   optional `SETUP = "farm"` (teleport everyone to the farm at 800,800 first)
   and `def run(session): ...`.
-- [ ] **Done when:** a trivial scenario `smoke_boot` (two instances reach
+- [x] **Done when:** a trivial scenario `smoke_boot` (two instances reach
   `in_world`) passes, and a deliberately false `expect` makes the runner exit
   non-zero with the artifacts saved.
 
@@ -130,12 +130,12 @@ the rig, plus fast checks that run in CI where the game is not available.
 - [ ] **File:** `mod/mt/gml/MtDev.gml` (plus small `mt_*_dev_*` helpers in the
   file that owns each system). Everything stays inert unless
   `MISTRIA_TOGETHER_DEV` is set.
-- [ ] **Command results.** Today commands only append to a log. Change
+- [x] **Command results.** Today commands only append to a log. Change
   `mt_dev_run` so every command file `dev_cmd_<n>.json` produces
   `dev_res_<n>.json` = `{ n, ok, error, value }`, written with
   `mt_ipc_write`. `value` is whatever the command returns (plain struct).
   The runner's `.cmd()` waits for that file. Keep `dev_state.json`.
-- [ ] **World digest.** Move the "near" list out of `mt_sync_dev_state` into a
+- [x] **World digest.** Move the "near" list out of `mt_sync_dev_state` into a
   command `digest { scope: "near" | "grid", radius }` returning sorted strings
   for soil, objects (id, root, hit points, stage) and chest contents. Stop
   computing it every 15 frames.
@@ -155,7 +155,7 @@ the rig, plus fast checks that run in CI where the game is not available.
   `donate { item }`, `museum`, `animal { action }`, `facts { keys }`,
   `save`, `save_info`, `quit_to_title`, `join { addr }`, `scene { name }`,
   `mine { floor }`.
-- [ ] **Done when:** `tools/gametest.py run smoke_commands` passes: it calls
+- [x] **Done when:** `tools/gametest.py run smoke_commands` passes: it calls
   `digest`, `clock`, `gold_get` on both instances and checks the result
   shapes.
 
@@ -164,22 +164,22 @@ the rig, plus fast checks that run in CI where the game is not available.
 Each becomes one scenario file. These must pass against v1.1.0 behaviour
 before any feature work (they are the regression net).
 
-- [ ] `join_snapshot`: after `session.connect()`, guests' near digest equals
+- [x] `join_snapshot`: after `session.connect()`, guests' near digest equals
   the host's on the farm.
-- [ ] `live_changes`: host erases an object, damages one, tills and waters;
+- [x] `live_changes`: host erases an object, damages one, tills and waters;
   guest erases a different object and tills; both digests equal within 5 s.
-- [ ] `away_and_back`: guest leaves the farm, host changes it, guest returns;
+- [x] `away_and_back`: guest leaves the farm, host changes it, guest returns;
   digests equal.
-- [ ] `host_new_day`: host runs the day transition; guests' calendar equals
+- [x] `host_new_day`: host runs the day transition; guests' calendar equals
   the host's and digests are equal.
-- [ ] `reconnect`: kill and restart the guest's companion; guest comes back
+- [x] `reconnect`: kill and restart the guest's companion; guest comes back
   online and digests are equal.
-- [ ] `menu_lan_join`: host and guest driven only through the `menu` command;
+- [x] `menu_lan_join`: host and guest driven only through the `menu` command;
   the guest finds the host in `link.json`'s `lan` list.
-- [ ] `movement_smooth`: guest moves 120 frames; the host's per-frame trace of
+- [x] `movement_smooth`: guest moves 120 frames; the host's per-frame trace of
   the ghost has no step larger than twice the mean step and ends within 2 px
   of the guest's real position.
-- [ ] Delete `tools/e2e.sh` and `tools/e2e_compare.py`; update `README.md`
+- [x] Delete `tools/e2e.sh` and `tools/e2e_compare.py`; update `README.md`
   "Building and testing" and `AGENTS.md` "Useful checks" to name
   `tools/gametest.py`.
 
@@ -193,12 +193,12 @@ mistakes.
   manifest's `minInstallerVersion` names) into `target/tools/`, then runs
   `momi-gml-check unit mod/mt/gml/*.gml`. Add a CI job that runs it on Linux
   and caches the build.
-- [ ] **Static rules script** `tools/lint-gml.py` (stdlib): fails on `noone`,
+- [x] **Static rules script** `tools/lint-gml.py` (stdlib): fails on `noone`,
   on a top-level `function` not starting with `mt_` or `__mt_`, on `\bmod\b`
   used as an identifier, on any call to an `mt_*` function that is not
   defined in `mod/mt/gml`, and on any `t: "<x>"` message type that has no
   `case "<x>"` handler (and the reverse). Add to CI.
-- [ ] **Fix what the lint finds first.** Known today: `MtNet.gml:97` handles
+- [x] **Fix what the lint finds first.** Known today: `MtNet.gml:97` handles
   message type `em` by calling `mt_players_on_emote`, which is not defined
   anywhere. Remove that case (no game sends `em`).
 - [ ] **Pure-logic unit tests.** New `mod/tests/*.gml` run with

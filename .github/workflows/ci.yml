@@ -19,3 +19,9 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --locked
       - run: cargo build --release --locked
+
+  gml-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 tools/lint-gml.py

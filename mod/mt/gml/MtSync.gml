@@ -835,6 +835,7 @@ function mt_sync_tick() {
 // ---------------------------------------------------------------------------
 
 function mt_sync_dev_command(_cmd) {
+    var _val = undefined;
     var _cx = floor(obj_ari.x / OBJECT_CELL_SIZE);
     var _cy = floor(obj_ari.y / OBJECT_CELL_SIZE);
     var _x = (_cmd[$ "x"] ?? (_cx + 2));
@@ -889,16 +890,52 @@ function mt_sync_dev_command(_cmd) {
         case "find":
             // Report the first few objects in the current grid.
             var _found = 0;
+            _val = { objects: [] };
             for (var _fi = 0; _fi < GRID.node_len && _found < 12; _fi++) {
                 var _fo = GRID.node_object_id[_fi];
                 if (_fo == undefined || GRID.node_parent[_fi].top_left_x != _fi % GRID.dims.x || GRID.node_parent[_fi].top_left_y != _fi div GRID.dims.x) { continue; }
                 if (_cmd[$ "category"] != undefined && object_id_to_object_category(_fo) != _cmd.category) { continue; }
                 mt_dev_note("obj " + object_id_to_string(_fo) + " @" + string(_fi % GRID.dims.x) + "," + string(_fi div GRID.dims.x)
                     + " cat=" + string(object_id_to_object_category(_fo)));
+                array_push(_val.objects, { name: object_id_to_string(_fo), x: _fi % GRID.dims.x, y: _fi div GRID.dims.x });
                 _found += 1;
             }
             break;
     }
+    return _val;
+}
+
+// Comparable text for the world: two games that agree about it produce the
+// same sorted list. scope "near" = within `radius` cells of the player,
+// "grid" = the whole current grid.
+function mt_sync_digest(_scope = "near", _radius = 14) {
+    var _out = [];
+    if (GRID == undefined || !instance_exists(obj_ari)) { return _out; }
+    var _cx = floor(obj_ari.x / OBJECT_CELL_SIZE);
+    var _cy = floor(obj_ari.y / OBJECT_CELL_SIZE);
+    var _x0 = 0; var _y0 = 0; var _x1 = GRID.dims.x - 1; var _y1 = GRID.dims.y - 1;
+    if (_scope != "grid") {
+        _x0 = max(0, _cx - _radius); _x1 = min(_x1, _cx + _radius);
+        _y0 = max(0, _cy - _radius); _y1 = min(_y1, _cy + _radius);
+    }
+    var _seen = {};
+    var _gw = GRID.dims.x;
+    for (var _yy = _y0; _yy <= _y1; _yy++) {
+        for (var _xx = _x0; _xx <= _x1; _xx++) {
+            var _ni = _yy * _gw + _xx;
+            if ((_xx & 1) == 0 && (_yy & 1) == 0 && (GRID.node_terrain_ground_kind[_ni] == GroundKind.Soil)) {
+                array_push(_out, "soil@" + string(_xx) + "," + string(_yy) + (GRID.node_terrain_is_watered[_ni] ? "#wet" : "#dry"));
+            }
+            if (GRID.node_object_id[_ni] == undefined) { continue; }
+            var _p = GRID.node_parent[_ni];
+            var _key = string(_p.top_left_x) + "," + string(_p.top_left_y);
+            if (_seen[$ _key] != undefined) { continue; }
+            _seen[$ _key] = true;
+            array_push(_out, object_id_to_string(_p.object_id) + "@" + _key + "#" + string(_p[$ "hitpoints"]) + "/" + string(_p[$ "stage"]));
+        }
+    }
+    array_sort(_out, true);
+    return _out;
 }
 
 function mt_sync_dev_state() {
@@ -911,32 +948,7 @@ function mt_sync_dev_state() {
             if (GRID.node_object_id[_i] != undefined && GRID.node_parent[_i].top_left_x == _i % _w && GRID.node_parent[_i].top_left_y == _i div _w) { _objects += 1; }
         }
     }
-    // Everything within reach of the player, as comparable text: two games
-    // that agree about the world produce the same list.
-    var _near = [];
-    if (GRID != undefined && instance_exists(obj_ari)) {
-        var _cx = floor(obj_ari.x / OBJECT_CELL_SIZE);
-        var _cy = floor(obj_ari.y / OBJECT_CELL_SIZE);
-        var _seen = {};
-        var _gw = GRID.dims.x;
-        for (var _yy = max(0, _cy - 14); _yy <= min(GRID.dims.y - 1, _cy + 14); _yy++) {
-            for (var _xx = max(0, _cx - 14); _xx <= min(_gw - 1, _cx + 14); _xx++) {
-                var _ni = _yy * _gw + _xx;
-                if ((_xx & 1) == 0 && (_yy & 1) == 0 && (GRID.node_terrain_ground_kind[_ni] == GroundKind.Soil)) {
-                    array_push(_near, "soil@" + string(_xx) + "," + string(_yy) + (GRID.node_terrain_is_watered[_ni] ? "#wet" : "#dry"));
-                }
-                if (GRID.node_object_id[_ni] == undefined) { continue; }
-                var _p = GRID.node_parent[_ni];
-                var _key = string(_p.top_left_x) + "," + string(_p.top_left_y);
-                if (_seen[$ _key] != undefined) { continue; }
-                _seen[$ _key] = true;
-                array_push(_near, object_id_to_string(_p.object_id) + "@" + _key + "#" + string(_p[$ "hitpoints"]) + "/" + string(_p[$ "stage"]));
-            }
-        }
-        array_sort(_near, true);
-    }
     return {
-        near: _near,
         adopted: _s.adopted,
         applied: _s.applied,
         want: _s.want_snapshot,

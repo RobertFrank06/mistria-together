@@ -15,7 +15,7 @@
 - `mod/mt/gml/`: in-game mod scripts.
 - `companion/src/`: Rust companion and network/session code.
 - `companion/tests/`: real-socket companion integration tests.
-- `tools/rig.sh` and `tools/e2e.sh`: Linux game test rig. It must use its
+- `tools/rig.sh` and `tools/gametest.py`: Linux game test rig and scenario suite. It must use its
   isolated game and save directories; never install test changes into the
   user's live game or modify real saves.
 - `README.md`: player-facing install and usage guide, shipped behavior only.
@@ -25,7 +25,6 @@
   message reference. Follow its order (test suite first, scenario before
   feature) and tick tasks as they land. Change `DESIGN.md` first if a task
   needs a rule to change.
-- `tools/gametest.py` (once Phase 0 lands) is the automated game test suite.
 
 ## Rules
 
@@ -50,6 +49,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features --locked
 cargo build --release --locked
 tools/package-mod.sh /tmp/mistria-together-package-check
+python3 tools/lint-gml.py
 ```
 
 The game rig requires a local Linux game install and MOMI. Run

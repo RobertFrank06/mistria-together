@@ -92,8 +92,10 @@ function mt_dev_note(_text) {
     while (array_length(_dev.log) > 40) { array_delete(_dev.log, 0, 1); }
 }
 
+// Runs one dev command and returns its result (a plain struct or undefined).
 function mt_dev_run(_cmd) {
     var _dev = mt_dev_state();
+    var _val = undefined;
     switch (_cmd[$ "cmd"]) {
         case "tp":
             ari_teleport_to_room(string_to_location_id(_cmd.room), _cmd.x, _cmd.y);
@@ -105,6 +107,17 @@ function mt_dev_run(_cmd) {
         case "move":
             // Glide the player by (dx, dy) pixels per frame for `frames` frames.
             _dev.move = { dx: _cmd.dx, dy: _cmd.dy, frames: _cmd.frames };
+            break;
+        case "digest":
+            _val = { lines: mt_sync_digest(_cmd[$ "scope"] ?? "near", _cmd[$ "radius"] ?? 14) };
+            break;
+        case "clock":
+            // Move the local clock (forward only, like the game's own jump).
+            if (_cmd[$ "set"] != undefined) { CLOCK.jump(_cmd.set); }
+            _val = { clk: CLOCK.time, cal: CALENDAR.time, paused: game_paused() };
+            break;
+        case "gold_get":
+            _val = { gold: ARI.gold };
             break;
         case "time":
             CLOCK.jump(_cmd.clk);
@@ -118,12 +131,12 @@ function mt_dev_run(_cmd) {
         case "menu":
             // Drive the Multiplayer menu and its views in the isolated rig.
             if (_cmd.action == "open") { mt_menu_open(); }
-            else if (_cmd.action == "more") { mt_menu_more(); }
-            else if (_cmd.action == "connections") { mt_menu_connections(); }
+            else if (_cmd.action == "more") { mt_menu_join_menu(); }
+            else if (_cmd.action == "connections") { mt_menu_nearby(); }
             else if (_cmd.action == "friends") { mt_menu_friends(); }
             else if (_cmd.action == "settings") { mt_menu_settings(); }
-            else if (_cmd.action == "pick") { mt_menu_on_join(0); }
-            else if (_cmd.action == "type") { mt_menu_on_join(99); }
+            else if (_cmd.action == "pick") { mt_menu_nearby(); }
+            else if (_cmd.action == "type") { mt_menu_direct_join(); }
             else if (_cmd.action == "host") { mt_menu_on_host(); }
             else if (_cmd.action == "join") { mt_menu_join_address(_cmd.addr); }
             else if (_cmd.action == "off") { mt_menu_on_disconnect(); }
@@ -142,9 +155,10 @@ function mt_dev_run(_cmd) {
             game_end();
             break;
         default:
-            mt_sync_dev_command(_cmd);
+            _val = mt_sync_dev_command(_cmd);
             break;
     }
+    return _val;
 }
 
 function mt_dev_tick() {
@@ -176,13 +190,18 @@ function mt_dev_tick() {
             var _cmd = try_read_json_file(_path, undefined, false);
             _dev.cmd_seq += 1;
             if (is_struct(_cmd)) {
+                var _res = { n: _dev.cmd_seq - 1, ok: true, error: "", value: undefined };
                 try {
-                    mt_dev_run(_cmd);
+                    _res.value = mt_dev_run(_cmd);
                     mt_dev_note("ok " + string(_cmd[$ "cmd"]));
                 } catch (_e) {
+                    _res.ok = false;
+                    _res.error = string(_e);
                     mt_dev_note("FAILED " + string(_cmd[$ "cmd"]) + ": " + string(_e));
                     mt_warn("dev command failed: " + string(_e));
                 }
+                try { mt_ipc_write("dev_res_" + string(_res.n) + ".json", json_stringify(_res)); }
+                catch (_e2) { mt_warn("dev result not written: " + string(_e2)); }
             }
         }
     }

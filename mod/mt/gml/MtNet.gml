@@ -94,7 +94,6 @@ function mt_net_dispatch(_from, _d) {
         case "p":   mt_players_on_pose(_peer, _d); break;
         case "ps":  mt_players_on_state(_peer, _d); break;
         case "hi":  mt_players_on_hello(_peer, _d); break;
-        case "em":  mt_players_on_emote(_peer, _d); break;
         default:    mt_world_on_message(_peer, _t, _d); break;
     }
 }
