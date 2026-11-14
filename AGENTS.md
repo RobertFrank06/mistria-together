@@ -18,11 +18,14 @@
 - `tools/rig.sh` and `tools/e2e.sh`: Linux game test rig. It must use its
   isolated game and save directories; never install test changes into the
   user's live game or modify real saves.
-- `README.md`: player-facing install and usage guide. `DESIGN.md`: architecture
-  and durable behavior boundaries.
-- Keep README claims limited to shipped behavior. `DESIGN.md` separates the
-  current implementation from the Stardew-like target; don't describe roadmap
-  behavior as already working.
+- `README.md`: player-facing install and usage guide, shipped behavior only.
+- `DESIGN.md`: the stable decisions: what is being built, why, and the
+  constraints. No status or to-do items.
+- `IMPLEMENT.md`: the ordered work checklist, status, verified game facts and
+  message reference. Follow its order (test suite first, scenario before
+  feature) and tick tasks as they land. Change `DESIGN.md` first if a task
+  needs a rule to change.
+- `tools/gametest.py` (once Phase 0 lands) is the automated game test suite.
 
 ## Rules
 
