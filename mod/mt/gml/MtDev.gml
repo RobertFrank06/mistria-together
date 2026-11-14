@@ -193,6 +193,26 @@ function mt_dev_run(_cmd) {
             _val = { result: mt_farm_save_guard() };
             _gs.adopted = _was;
             break;
+        case "bin_put":
+            shipping_bins().first().inventory.add(ItemId.Turnip, _cmd[$ "count"] ?? 1);
+            break;
+        case "bin_info":
+            var _bn = shipping_bins().first();
+            var _bx = _bn.top_left_x;
+            var _by = _bn.top_left_y;
+            var _in_grid = _bx >= 0 && _by >= 0 && _bx < GRID.dims.x && _by < GRID.dims.y && GRID.node_parent[GRID.node_index_for_cell(_bx, _by)] == _bn;
+            var _bs = mt_sync_state();
+            _val = {
+                x: _bx, y: _by, in_grid: _in_grid, bins: shipping_bins().count(), storage: STORAGE_NODES.count(),
+                cat: string(object_id_to_object_category(_bn.object_id)), synced: mt_sync_object_synced(_bn.object_id),
+                known: _bs.sigs[$ (string(_bx) + ":" + string(_by))] != undefined, grid_shared: mt_sync_grid_shared(GRID),
+                tracking: _bs.grid == GRID, player: [floor(obj_ari.x / OBJECT_CELL_SIZE), floor(obj_ari.y / OBJECT_CELL_SIZE)],
+                adopted: _bs.adopted, sent: _bs.sent, received: _bs.received,
+            };
+            break;
+        case "bin_value":
+            _val = { value: mt_money_bin_total() };
+            break;
         case "gold":
             if (_cmd[$ "set"] != undefined) { ARI.set_gold(_cmd.set); }
             if (_cmd[$ "add"] != undefined) { ARI.modify_gold(_cmd.add); }
@@ -378,6 +398,7 @@ function mt_dev_tick() {
             _state.sync = mt_sync_dev_state();
         }
         _state.night = mt_night_dev_state();
+        _state.money = mt_money_dev_state();
         mt_ipc_write("dev_state.json", json_stringify(_state));
     }
 }

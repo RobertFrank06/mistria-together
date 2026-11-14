@@ -191,7 +191,10 @@ function mt_night_host_check() {
     _w.time_sent_frame = -100000;
     _n.day = CALENDAR.time;
     mt_log("night starts, " + string(array_length(_online)) + " player(s) ready");
-    mt_send(MT_TO_ALL, { t: "ng", day: _n.day });
+    var _bin = mt_money_bin_total();
+    var _shares = mt_money_split(_bin, _online, _rt.self_id);
+    mt_send(MT_TO_ALL, { t: "ng", day: _n.day, bin: _bin, shares: _shares });
+    mt_money_on_night(_n.day, _bin, _shares);
     mt_night_run();
 }
 
@@ -210,6 +213,7 @@ function mt_night_on_message(_peer, _t, _d) {
         case "ng":
             if (_peer.id != _rt.host_id) { break; }
             _n.day = _d[$ "day"];
+            mt_money_on_night(_n.day, _d[$ "bin"] ?? 0, _d[$ "shares"]);
             mt_world_state().st_night = true;
             mt_night_run();
             break;

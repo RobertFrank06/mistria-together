@@ -57,6 +57,7 @@ function mt_sync_reset() {
         sigs: {},
         sig_frame: {},
         cursor: 0,
+        stor_cursor: 0,
         terrain_out: [],
         // statistics for the dev overlay / tests
         sent: 0,
@@ -625,21 +626,42 @@ function mt_sync_scan_signatures(_s, _grid, _cx, _cy) {
             if (_seen[$ _key] != undefined) { continue; }
             _seen[$ _key] = true;
             if (!mt_sync_object_synced(_oid)) { continue; }
-            var _sig = undefined;
-            try { _sig = json_stringify(mt_sync_object_data(_p)); } catch (_e) { continue; }
-            var _known = _s.sigs[$ _key];
-            if (_known == undefined) {
-                _s.sigs[$ _key] = _sig;
-            } else if (_known != _sig) {
-                // At most two reports a second for any one object, in case
-                // something in it ticks every frame.
-                var _last = _s.sig_frame[$ _key];
-                if (_last != undefined && _frame - _last < 30) { continue; }
-                _s.sig_frame[$ _key] = _frame;
-                _s.sigs[$ _key] = mt_sync_emit_object(_grid, _p) ?? _sig;
-            }
+            mt_sync_check_signature(_s, _grid, _p, _key, _frame);
         }
     }
+}
+
+// Compare one object with its last reported state and report a change.
+function mt_sync_check_signature(_s, _grid, _p, _key, _frame) {
+    var _sig = undefined;
+    try { _sig = json_stringify(mt_sync_object_data(_p)); } catch (_e) { return; }
+    var _known = _s.sigs[$ _key];
+    if (_known == undefined) {
+        _s.sigs[$ _key] = _sig;
+    } else if (_known != _sig) {
+        // At most two reports a second for any one object, in case
+        // something in it ticks every frame.
+        var _last = _s.sig_frame[$ _key];
+        if (_last != undefined && _frame - _last < 30) { return; }
+        _s.sig_frame[$ _key] = _frame;
+        _s.sigs[$ _key] = mt_sync_emit_object(_grid, _p) ?? _sig;
+    }
+}
+
+// Chests and the shipping bin can change while nobody stands next to them
+// (someone else is emptying them): check one storage object per call, wherever
+// it is in the grid we are in.
+function mt_sync_scan_storage(_s, _grid) {
+    var _n = STORAGE_NODES.count();
+    if (_n == 0) { return; }
+    _s.stor_cursor = (_s.stor_cursor + 1) % _n;
+    var _node = STORAGE_NODES.get(_s.stor_cursor);
+    var _x = _node.top_left_x;
+    var _y = _node.top_left_y;
+    if (_x < 0 || _y < 0 || _x >= _grid.dims.x || _y >= _grid.dims.y) { return; }
+    var _ni = _grid.node_index_for_cell(_x, _y);
+    if (_grid.node_parent[_ni] != _node || !mt_sync_object_synced(_node.object_id)) { return; }
+    mt_sync_check_signature(_s, _grid, _node, string(_x) + ":" + string(_y), __mt_rt().frame);
 }
 
 function mt_sync_scan() {
@@ -675,6 +697,7 @@ function mt_sync_scan() {
             mt_sync_scan_signatures(_s, _grid, _cx, _cy);
         }
     } else {
+        if (_rt.frame % 5 == 1) { mt_sync_scan_storage(_s, _grid); }
         var _n = _grid.node_len;
         var _count = min(MT_SYNC_SWEEP_CELLS, _n);
         var _ni = _s.cursor;

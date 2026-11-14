@@ -214,6 +214,7 @@ function mt_world_filter_time_advance(_value, _ctx) {
 
 function mt_world_on_new_day(_ctx) {
     mt_night_on_new_day(_ctx);
+    mt_money_on_new_day(_ctx);
     var _w = mt_world_state();
     if (mt_is_host()) { _w.st = hours(6); _w.st_night = false; _w.time_sent_frame = -100000; }
     mt_sync_on_new_day(_ctx);

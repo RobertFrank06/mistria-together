@@ -11,5 +11,6 @@ requires_hooks = [
     "game.save_guard",
     "game.title_entered",
     "object.interact",
+    "player.gold_delta",
     "ui.draw_gui",
 ]
