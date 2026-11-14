@@ -343,7 +343,19 @@ function mt_menu_title_setup() {
     new_chain()
         .append(LinkId.Await, function() {
             var _title = ANCHOR.get_menu(Menu.Title);
-            return _title != undefined && _title[$ "button_root"] != undefined;
+            if (_title == undefined || _title[$ "button_root"] == undefined || _title[$ "pilot"] == undefined) { return false; }
+            // The game animates its own buttons into place (setting their
+            // positions), so wait until that has finished: shifting them
+            // earlier would be undone and leave two buttons on top of each other.
+            var _map = _title.pilot.map;
+            if (array_length(_map) == 0) { return false; }
+            for (var _r = 0; _r < array_length(_map); _r++) {
+                for (var _c = 0; _c < array_length(_map[_r]); _c++) {
+                    var _n = _map[_r][_c];
+                    if (_n != undefined && _n.get_alpha() < 1) { return false; }
+                }
+            }
+            return true;
         })
         .append(LinkId.Function, mt_menu_title_add_button);
 }

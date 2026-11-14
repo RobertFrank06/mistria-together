@@ -274,6 +274,31 @@ function mt_dev_run(_cmd) {
             if (_cmd[$ "set"] != undefined) { _lp.skin_tone = _cmd.set; }
             _val = { tone: _lp.skin_tone };
             break;
+        case "title_button":
+            // The Multiplayer button on the title screen: its state, and (tap) a click on it.
+            var _tb = __mt_rt().title_button;
+            if (_tb == undefined) { _val = { exists: false }; break; }
+            if (_cmd[$ "tap"] == true) { ANCHOR.tap_node(_tb); }
+            _val = {
+                exists: true, unlocked: _tb.is_unlocked(), alpha: _tb.get_alpha(),
+                x: _tb.get_x(), y: _tb.get_y(), w: _tb.width, h: _tb.height,
+                popup: ANCHOR.get_menu(Menu.Popup) != undefined,
+                hovers: _tb.listens_for_hovers, taps: _tb.listens_for_taps, enabled: _tb.safe_enabled,
+                run_logic: _tb.run_logic, bbox: [_tb.cache_bbox_left, _tb.cache_bbox_top, _tb.cache_bbox_right, _tb.cache_bbox_bottom],
+                rows: [],
+            };
+            var _tmenu = ANCHOR.get_menu(Menu.Title);
+            if (_tmenu != undefined) {
+                for (var _ri = 0; _ri < array_length(_tmenu.pilot.map); _ri++) {
+                    var _rr = _tmenu.pilot.map[_ri];
+                    for (var _rc = 0; _rc < array_length(_rr); _rc++) {
+                        var _n = _rr[_rc];
+                        if (_n == undefined) { continue; }
+                        array_push(_val.rows, { row: _ri, y: _n.get_y(), h: _n.height, hovers: _n.listens_for_hovers, taps: _n.listens_for_taps, unlocked: _n.safe_unlocked, bbox: [_n.cache_bbox_left, _n.cache_bbox_top, _n.cache_bbox_right, _n.cache_bbox_bottom] });
+                    }
+                }
+            }
+            break;
         case "customization_state":
             _val = { open: ANCHOR.get_menu(Menu.Customization) != undefined };
             break;
