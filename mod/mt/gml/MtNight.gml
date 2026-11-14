@@ -192,7 +192,7 @@ function mt_night_host_check() {
     _n.day = CALENDAR.time;
     mt_log("night starts, " + string(array_length(_online)) + " player(s) ready");
     var _bin = mt_money_bin_total();
-    var _shares = mt_money_split(_bin, _online, _rt.self_id);
+    var _shares = mt_money_state().mode == "shared" ? mt_money_split(_bin, [_rt.self_id], _rt.self_id) : mt_money_split(_bin, _online, _rt.self_id);
     mt_send(MT_TO_ALL, { t: "ng", day: _n.day, bin: _bin, shares: _shares });
     mt_money_on_night(_n.day, _bin, _shares);
     mt_night_run();

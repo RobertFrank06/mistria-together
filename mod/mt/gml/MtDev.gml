@@ -193,6 +193,14 @@ function mt_dev_run(_cmd) {
             _val = { result: mt_farm_save_guard() };
             _gs.adopted = _was;
             break;
+        case "wallet":
+            if (_cmd[$ "now"] == true) { mt_money_apply_mode(_cmd.mode); } else { mt_money_request_mode(_cmd.mode); }
+            _val = { mode: mt_money_state().mode, pending: mt_money_state().pending };
+            break;
+        case "spend":
+            // A purchase: change gold the way the game does.
+            ARI.modify_gold(-_cmd.amount);
+            break;
         case "bin_put":
             shipping_bins().first().inventory.add(ItemId.Turnip, _cmd[$ "count"] ?? 1);
             break;

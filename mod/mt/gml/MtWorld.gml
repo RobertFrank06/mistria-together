@@ -47,6 +47,7 @@ function mt_world_on_online() {
 function mt_world_on_peer_joined(_id) {
     var _w = mt_world_state();
     _w.time_sent_frame = -100000;    // push the time to the newcomer right away
+    mt_money_on_peer_joined(_id);
     mt_sync_on_peer_joined(_id);
 }
 
@@ -151,6 +152,7 @@ function mt_world_tick() {
         }
         mt_world_follow();
     }
+    mt_money_tick();
     mt_sync_tick();
 }
 
@@ -192,6 +194,10 @@ function mt_world_on_time(_peer, _d) {
 function mt_world_on_message(_peer, _t, _d) {
     if (_t == "tm") {
         mt_world_on_time(_peer, _d);
+        return;
+    }
+    if (_t == "gd" || _t == "gx" || _t == "gb" || _t == "gm" || _t == "gr") {
+        mt_money_on_message(_peer, _t, _d);
         return;
     }
     if (_t == "nr" || _t == "ns" || _t == "ng") {

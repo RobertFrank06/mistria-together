@@ -18,7 +18,7 @@ to fail before the feature code is written.**
 | 1 | Session clock and host pause | done (spikes folded in; 1.7 asserted to 2:00 only) |
 | 2 | Group day end | done except `night_guest_cannot_advance`, `night_host_faints`, `night_two_am`, `night_join_during`, the morning-wait popup (2.8) and unit test 2.2 |
 | 3 | Farmhand saves | done (name-only creation, relaxed save guard; see notes) |
-| 4 | Money and shipping | not started |
+| 4 | Money and shipping | done (shared-wallet race: the host's own overspend is clamped at zero) |
 | 5 | Shared progress and animals | not started |
 | 6 | Dropped items and chest locking | not started |
 | 7 | Scenes and festivals | not started |
@@ -509,7 +509,7 @@ summary's `init` (`:96`), as one `modify_gold` call.
 
 ### 4A Separate wallets (first)
 
-- [ ] **Scenarios first** (`money_*`):
+- [x] **Scenarios first** (`money_*`):
   - `money_bin_split`: host and guest each put items in the bin; after the
     night each player's gold rose by exactly half the bin's value (odd
     remainder to the host); the bin is empty on both.
@@ -519,50 +519,50 @@ summary's `init` (`:96`), as one `modify_gold` call.
     unchanged.
   - `money_faint_no_early_pay`: a guest who faints at noon is not paid at
     that moment; they are paid their share when the night runs.
-- [ ] **Bin value:** when the host broadcasts `ng`, it first computes the
+- [x] **Bin value:** when the host broadcasts `ng`, it first computes the
   total with the game's own valuation (sum of `live_item.bin_value()` over
   `shipping_bins()`, as `sell_shipping_bin_items` does) and includes
   `bin: total, shares: { id: amount }` in `ng`.
-- [ ] **No local payout:** in the `ui.menu_opened(Menu.Eod)` handler, while
+- [x] **No local payout:** in the `ui.menu_opened(Menu.Eod)` handler, while
   online with others, every machine (host included) empties the bin
   inventories before the summary sells them (spike confirms the order). The
   host does this after computing the total.
-- [ ] **Pay the share:** after the morning is in place (host: its
+- [x] **Pay the share:** after the morning is in place (host: its
   `game.new_day`; guest: snapshot applied), call `ARI.modify_gold(share)`
   once and show a toast with the bin total and the share. Guard against
   paying twice for the same `day`.
-- [ ] **Bin contents are already shared** by live sync (the bin is a grid
+- [x] **Bin contents are already shared** by live sync (the bin is a grid
   object with an inventory). Assert it in `money_bin_split`.
 
 ### 4B Shared wallet
 
-- [ ] **Scenarios first:** `wallet_shared_spend` (guest spends, host's
+- [x] **Scenarios first:** `wallet_shared_spend` (guest spends, host's
   displayed gold drops by the same amount), `wallet_shared_floor` (two
   simultaneous spends that together exceed the balance: exactly one is
   refused), `wallet_switch_to_shared` (balances add up next morning),
   `wallet_switch_to_separate` (even split next morning), `wallet_rejoin`
   (a player who was offline during shared mode rejoins and sees the shared
   balance, their old personal gold untouched until the mode returns).
-- [ ] **Ledger:** host holds `wallet.balance`. Mode and balance are stored in
+- [x] **Ledger:** host holds `wallet.balance`. Mode and balance are stored in
   the host's mod save data (3.5).
-- [ ] **Deltas:** in shared mode every machine's `player.gold_delta` filter
+- [x] **Deltas:** in shared mode every machine's `player.gold_delta` filter
   returns `0` for the local change and sends `gd { amount, seq }` to the host
   (the host applies its own directly). The host applies deltas in arrival
   order; a negative delta that would go below zero is refused with `gx { seq
   }`, and the sender undoes the purchase if possible or shows a notice (see
   risk). The host broadcasts `gb { balance }`; everyone calls
   `ARI.set_gold(balance)` (no hook fires for `set_gold`).
-- [ ] **Risk to resolve in the first task of 4B:** a purchase has already
+- [x] **Risk to resolve in the first task of 4B:** a purchase has already
   handed over the item when `modify_gold` runs. Check each spend path for a
   "can afford" test that reads `ARI.gold`; if all do, the local balance is
   authoritative enough and refusals can only come from races. Document the
   result; if races can duplicate value, make spends request-then-apply for
   shop menus only.
-- [ ] **Mode switch:** F9 menu (host): "Wallet: separate / shared". Stored as
+- [x] **Mode switch:** F9 menu (host): "Wallet: separate / shared". Stored as
   pending; applied by the host at its `game.new_day`, announced with `gm {
   mode, balance | shares }`. Personal gold is kept aside (in each farmhand's
   mod save data) while shared mode is on.
-- [ ] **Done when:** all `money_*` and `wallet_*` scenarios pass.
+- [x] **Done when:** all `money_*` and `wallet_*` scenarios pass.
 
 ## Phase 5: Shared progress and animals
 

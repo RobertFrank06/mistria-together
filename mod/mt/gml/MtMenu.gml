@@ -220,6 +220,11 @@ function mt_menu_open() {
         var _paused = mt_world_state().st_paused;
         _status.create_button(mt_menu_text(_paused ? "Resume game" : "Pause game"), mt_menu_toggle_pause);
     }
+    if (mt_is_host() && _rt.online) {
+        var _wm = mt_money_state();
+        var _target = (_wm.pending != "" ? _wm.pending : _wm.mode) == "shared" ? "separate" : "shared";
+        _status.create_button(mt_menu_text("Wallet: " + _target), mt_menu_request_wallet, [_target]);
+    }
     _status.create_button(mt_menu_text("Settings"), mt_menu_settings);
     _status.create_button(mt_menu_text("Disconnect"), mt_menu_on_disconnect);
     _status.spawn();
@@ -246,6 +251,10 @@ function mt_menu_on_host() {
     if (!mt_in_world()) {
         mt_menu_notice("Multiplayer", "Hosting starts as soon as you load a save. Others on your network will find you by themselves; over the internet they need your address.");
     }
+}
+
+function mt_menu_request_wallet(_mode) {
+    mt_money_request_mode(_mode);
 }
 
 function mt_menu_toggle_pause(_unused = 0) {

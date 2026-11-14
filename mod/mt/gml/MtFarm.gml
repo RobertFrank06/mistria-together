@@ -53,14 +53,18 @@ function mt_farm_register() {
 
 function mt_farm_save_collect() {
     var _f = mt_farm_state();
-    if (is_struct(_f.tag)) { return _f.tag; }
+    if (is_struct(_f.tag)) {
+        var _p = mt_money_state().personal;
+        if (_p != undefined) { _f.tag.personal = _p; }
+        return _f.tag;
+    }
     if (is_struct(_f.pending)) {
         _f.tag = _f.pending;
         _f.pending = undefined;
         return _f.tag;
     }
     if (mt_is_host()) {
-        return { v: 1, role: "host", farm_id: mt_farm_id(), farm_name: string(ARI.farm_name), host_name: string(ARI.name) };
+        return { v: 1, role: "host", farm_id: mt_farm_id(), farm_name: string(ARI.farm_name), host_name: string(ARI.name), wallet: mt_money_state().mode };
     }
     return undefined;
 }
@@ -69,6 +73,10 @@ function mt_farm_save_apply(_data) {
     var _f = mt_farm_state();
     if (is_struct(_data)) { _f.tag = _data; }
     else { _f.tag = _f.pending; }
+    // The host's wallet mode comes back with its farm.
+    var _m = mt_money_state();
+    _m.mode = (is_struct(_data) && _data[$ "role"] == "host" && _data[$ "wallet"] == "shared") ? "shared" : "separate";
+    _m.personal = (is_struct(_data) && _data[$ "personal"] != undefined) ? _data.personal : undefined;
     _f.pending = undefined;
 }
 
