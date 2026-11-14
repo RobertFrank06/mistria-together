@@ -226,6 +226,16 @@ function mt_dev_run(_cmd) {
             // A player's drop: one turnip stack a little to the right.
             drop_item([new LiveItem(ItemId.Turnip)], obj_ari.x + 220, obj_ari.y);
             break;
+        case "scene_flag":
+            // As a story scene does: the cutscene pause flag.
+            if (_cmd.on == true) { PAUSE_STATUS = PAUSE_STATUS | PauseStatus.CUTSCENE; }
+            else { PAUSE_STATUS = remove_flag(PAUSE_STATUS, PauseStatus.CUTSCENE); }
+            break;
+        case "items_clear":
+            // What a scene start does to loose items in the room.
+            var _ic = mt_items_all();
+            for (var _icx = 0; _icx < array_length(_ic); _icx++) { _ic[_icx].picked_up = true; instance_destroy(_ic[_icx]); }
+            break;
         case "items_dbg":
             _val = mt_items_dev_state();
             break;
@@ -477,7 +487,7 @@ function mt_dev_tick() {
                 };
             }
             array_push(_peers, {
-                id: _peer.id, name: _peer.name, loc: _peer.loc, ping: _peer.ping,
+                id: _peer.id, name: _peer.name, loc: _peer.loc, hidden: _peer.hidden, ping: _peer.ping,
                 buf: array_length(_peer.buf), has_look: _peer.look != undefined, ghost: _ghost,
             });
         }

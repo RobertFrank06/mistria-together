@@ -199,7 +199,7 @@ function mt_world_on_message(_peer, _t, _d) {
         mt_world_on_time(_peer, _d);
         return;
     }
-    if (_t == "id" || _t == "ic" || _t == "cg" || _t == "cd" || _t == "ix" || _t == "kl" || _t == "kg" || _t == "kd" || _t == "kr") {
+    if (_t == "id" || _t == "ic" || _t == "cg" || _t == "cd" || _t == "ix" || _t == "il" || _t == "kl" || _t == "kg" || _t == "kd" || _t == "kr") {
         mt_items_on_message(_peer, _t, _d);
         return;
     }

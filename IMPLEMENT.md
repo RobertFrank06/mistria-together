@@ -21,7 +21,7 @@ to fail before the feature code is written.**
 | 4 | Money and shipping | done (shared-wallet race: the host's own overspend is clamped at zero) |
 | 5 | Shared progress and animals | done (museum set rewards for other players not given; animal scenario only checks a farm with animals exists) |
 | 6 | Dropped items and chest locking | done (items dropped in rooms nobody is in are not arbitrated) |
-| 7 | Scenes and festivals | not started |
+| 7 | Scenes and festivals | done (cleared items may also reappear at the next room entry from the game's own lost-items list) |
 | 8 | Mines | not started |
 
 Known gaps in what is shipped, all closed by the phases below: the host's
@@ -646,22 +646,22 @@ DESIGN.md section 7. Needs: Phase 3.
 
 DESIGN.md sections 4, 5, 7. Needs: Phases 1, 2, 6.
 
-- [ ] **7.1 Scenarios first:** `scene_hides_player` (guest runs a short
+- [x] **7.1 Scenarios first:** `scene_hides_player` (guest runs a short
   scene; the host's ghost of the guest is hidden during it and back after),
   `scene_clock_runs` (session time advances during the guest's scene),
   `scene_items_survive` (a tagged dropped item in the room is still there for
   both after the guest's scene), `scene_ends_day_holds` (a scene with
   `ends_day` puts that player in the held state).
-- [ ] **7.2 Hidden flag.** Add `q:1` to the pose while
+- [x] **7.2 Hidden flag.** Add `q:1` to the pose while
   `has_flag(PAUSE_STATUS, PauseStatus.CUTSCENE)`; receivers do not draw that
   ghost.
-- [ ] **7.3 Loose items.** A scene start destroys every `obj_item` in the
+- [x] **7.3 Loose items.** A scene start destroys every `obj_item` in the
   room after storing them as lost (`Mist.gml:364-420`). After the scene ends
   locally, re-create tagged items from the host's live gid list for that
   location (request `il { g }` -> `id` messages).
-- [ ] **7.4 Day-ending scenes** need no new code beyond Phase 2.5; the
+- [x] **7.4 Day-ending scenes** need no new code beyond Phase 2.5; the
   scenario pins it. Festivals use the same rules as any location.
-- [ ] **Done when:** scenarios pass.
+- [x] **Done when:** scenarios pass.
 
 ## Phase 8: Mines
 

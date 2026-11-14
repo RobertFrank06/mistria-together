@@ -136,12 +136,13 @@ function mt_players_tick() {
         a: _anim,
         f: _par.base_current_frame_index(),
         m: mt_players_first_modifier(_par),
+        q: has_flag(PAUSE_STATUS, PauseStatus.CUTSCENE) ? 1 : 0,
     };
     var _last = _rt.pose_sent;
     var _since = _rt.frame - _rt.pose_sent_frame;
     if (_last != undefined && _since < MT_POSE_KEEPALIVE
         && _last.x == _pose.x && _last.y == _pose.y && _last.z == _pose.z
-        && _last.c == _pose.c && _last.a == _pose.a && _last.m == _pose.m && _last.l == _pose.l) {
+        && _last.c == _pose.c && _last.a == _pose.a && _last.m == _pose.m && _last.l == _pose.l && _last.q == _pose.q) {
         return;
     }
     // "h" tells receivers we stood still since the previous pose, so they hold
@@ -178,6 +179,7 @@ function mt_players_on_pose(_peer, _d) {
     var _s = _d[$ "s"];
     if (!is_numeric(_s) || !is_numeric(_d[$ "x"]) || !is_numeric(_d[$ "y"])) { return; }
     if (_s <= _peer.last_s && _peer.last_s - _s < 600) { return; }   // stale / duplicate
+    _peer.hidden = _d[$ "q"] == 1;
     var _loc = _d[$ "l"];
     var _buf = _peer.buf;
     var _n = array_length(_buf);
@@ -367,6 +369,8 @@ function mt_ghost_step(_g) {
 }
 
 function mt_ghost_draw(_g, _draw_x, _draw_y) {
+    var _hp = mt_peer(_g.mt_peer_id);
+    if (_hp != undefined && _hp.hidden) { return; }     // in a scene
     var _x = _draw_x ?? _g.x;
     var _y = _draw_y ?? _g.y;
     _g.par.draw(_x + _g.par_offset.x, _y + _g.par_offset.y + _g.z, _g.depth);

@@ -32,6 +32,7 @@ function mt_net_add_peer(_id, _name) {
         look: undefined,        // serialized PlayerAnimationAssets
         look_key: "",
         loc: undefined,         // location key the peer is in
+        hidden: false,          // the peer is in a scene: not drawn
         state: undefined,       // slow-changing visual state (held item, tool, ...)
         state_key: "",
         inst: undefined,            // obj_mt_player instance while in our room

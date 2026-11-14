@@ -12,7 +12,7 @@
 #macro MT_VERSION "1.1.0"
 // Bumped whenever game-to-game messages change shape. Peers with a different
 // value are refused by the companion before they ever reach the game.
-#macro MT_PROTO 7
+#macro MT_PROTO 8
 #macro MT_CONFIG_VERSION 2
 
 #macro MT_TO_ALL -1

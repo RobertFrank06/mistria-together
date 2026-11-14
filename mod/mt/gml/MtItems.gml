@@ -14,6 +14,8 @@ function mt_items_state() {
     if (_rt[$ "items"] == undefined) {
         _rt.items = {
             counter: 0,
+            meta: {},           // host: gid -> the `id` message, to restore items after a scene
+            was_cut: false,
             dbg_events: 0,      // items.dropped events seen
             dbg_tagged: 0,      // stacks tagged
             tracked: {},        // gid -> { inst, claim }
@@ -100,19 +102,26 @@ function mt_items_tag_new() {
         _it.dbg_tagged += 1;
         _it.tracked[$ _gid] = { claim: "none" };
         if (mt_is_host()) { _it.live[$ _gid] = true; }
+        var _msg = {
+            t: "id", gid: _gid, g: mt_sync_grid_ref(GRID), x: _inst.x, y: _inst.y,
+            fx: _inst.final_x, fy: _inst.final_y, items: mt_items_serialize(_inst),
+        };
+        if (mt_is_host()) { _it.meta[$ _gid] = _msg; }
         try {
-            mt_send(MT_TO_ALL, {
-                t: "id", gid: _gid, g: mt_sync_grid_ref(GRID), x: _inst.x, y: _inst.y,
-                fx: _inst.final_x, fy: _inst.final_y, items: mt_items_serialize(_inst),
-            });
+            mt_send(MT_TO_ALL, _msg);
         } catch (_e) { mmapi_warn_rate_limited("mt_items_id", MT_MOD, "could not announce a dropped item: " + string(_e)); }
     }
 }
 
 function mt_items_on_id(_peer, _d) {
     var _it = mt_items_state();
-    if (mt_is_host()) { _it.live[$ _d.gid] = true; }
-    if (_it.tracked[$ _d.gid] != undefined) { return; }
+    if (mt_is_host()) { _it.live[$ _d.gid] = true; _it.meta[$ _d.gid] = _d; }
+    if (_it.tracked[$ _d.gid] != undefined && mt_items_find(_d.gid) != undefined) { return; }
+    mt_items_spawn(_d);
+}
+
+function mt_items_spawn(_d) {
+    var _it = mt_items_state();
     var _grid = mt_sync_find_grid(_d.g);
     if (_grid == undefined) { return; }
     var _items = [];
@@ -128,6 +137,23 @@ function mt_items_on_id(_peer, _d) {
     _inst.setup(ListFromArray(_items));
     _it.by_inst[$ string(_inst.id)] = _d.gid;
     _it.tracked[$ _d.gid] = { claim: "none" };
+}
+
+// After a scene (which clears the room's loose items) the host's list brings them back.
+function mt_items_restore(_to) {
+    var _it = mt_items_state();
+    var _here = json_stringify(mt_sync_grid_ref(GRID));
+    var _names = struct_get_names(_it.meta);
+    for (var _i = 0; _i < array_length(_names); _i++) {
+        var _gid = _names[_i];
+        var _d = _it.meta[$ _gid];
+        if (_it.live[$ _gid] != true || json_stringify(_d.g) != _here) { continue; }
+        if (_to == __mt_rt().self_id) {
+            if (mt_items_find(_gid) == undefined) { mt_items_spawn(_d); }
+        } else {
+            mt_send(_to, _d);
+        }
+    }
 }
 
 // The local player is collecting an item: hold it until the host agrees.
@@ -166,6 +192,7 @@ function mt_items_host_claim(_gid, _who) {
     var _granted = _it.live[$ _gid] == true;
     if (_granted) {
         struct_remove(_it.live, _gid);
+        struct_remove(_it.meta, _gid);
         mt_send(MT_TO_ALL, { t: "ix", gid: _gid, by: _who });
     }
     if (_who == _rt.self_id) { mt_items_answer(_gid, _granted); }
@@ -268,12 +295,27 @@ function mt_items_on_leave(_id) {
 
 // --- plumbing -----------------------------------------------------------------------------------
 
+// True once, when a scene has just ended.
+function mt_items_scene_edge(_cut) {
+    var _it = mt_items_state();
+    var _edge = _it.was_cut && !_cut;
+    _it.was_cut = _cut;
+    return _edge;
+}
+
 function mt_items_tick() {
     if (!mt_night_active()) { return; }
     try { mt_items_tag_new(); }
     catch (_e1) { mmapi_warn_rate_limited("mt_items_tag", MT_MOD, "items tag failed: " + string(_e1)); }
     try { mt_items_scan_pickups(); }
     catch (_e2) { mmapi_warn_rate_limited("mt_items_scan", MT_MOD, "items scan failed: " + string(_e2)); }
+    var _cut = has_flag(PAUSE_STATUS, PauseStatus.CUTSCENE);
+    if (mt_items_scene_edge(_cut)) {
+        try {
+            if (mt_is_host()) { mt_items_restore(__mt_rt().self_id); }
+            else { mt_send(MT_TO_HOST, { t: "il", g: mt_sync_grid_ref(GRID) }); }
+        } catch (_e4) { mmapi_warn_rate_limited("mt_items_restore", MT_MOD, "could not restore items: " + string(_e4)); }
+    }
     try { mt_items_check_release(); }
     catch (_e3) { mmapi_warn_rate_limited("mt_items_release", MT_MOD, "chest release failed: " + string(_e3)); }
 }
@@ -302,6 +344,7 @@ function mt_items_on_message(_peer, _t, _d) {
                     mt_send(_peer.id, { t: "kd", k: _d.k, by: _holder });
                 }
                 break;
+            case "il": if (mt_is_host()) { mt_items_restore(_peer.id); } break;
             case "kg": mt_items_on_lock_answer(true, -1); break;
             case "kd": mt_items_on_lock_answer(false, _d[$ "by"] ?? -1); break;
             case "kr": if (mt_is_host() && _it.locks[$ _d.k] == _peer.id) { struct_remove(_it.locks, _d.k); } break;
