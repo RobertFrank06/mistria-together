@@ -20,7 +20,7 @@ to fail before the feature code is written.**
 | 3 | Farmhand saves | done (name-only creation, relaxed save guard; see notes) |
 | 4 | Money and shipping | done (shared-wallet race: the host's own overspend is clamped at zero) |
 | 5 | Shared progress and animals | done (museum set rewards for other players not given; animal scenario only checks a farm with animals exists) |
-| 6 | Dropped items and chest locking | partial: chest locking passes (`chest_lock`); dropped items are written but `items_drop_visible` and `items_pickup_once` still fail (the item scan hits `expired instance`; the instance reference taken for a tagged drop goes stale) |
+| 6 | Dropped items and chest locking | done (items dropped in rooms nobody is in are not arbitrated) |
 | 7 | Scenes and festivals | not started |
 | 8 | Mines | not started |
 
@@ -609,14 +609,14 @@ DESIGN.md section 3. Needs: Phase 3.
 
 DESIGN.md section 7. Needs: Phase 3.
 
-- [ ] **6.1 Scenarios first:** `items_drop_visible` (guest drops; host sees
+- [x] **6.1 Scenarios first:** `items_drop_visible` (guest drops; host sees
   an item at that spot), `items_pickup_once` (both players next to one item
   trigger pickup in the same second; exactly one inventory gains it and the
   item is gone for both), `items_leave_room` (an item dropped in a room
   nobody is in is there when a player enters), `chest_lock` (guest opens a
   chest; the host's attempt is refused with the guest's name; after the guest
   closes it the host can open it and sees the guest's change).
-- [ ] **6.2 Item identity.** Each dropped stack gets an id `<peer>-<counter>`
+- [x] **6.2 Item identity.** Each dropped stack gets an id `<peer>-<counter>`
   stored on the `obj_item` instance (`mt_gid`). Hook `items.dropped` (ctx `{
   items, x, y, ... }`, fires before the items spawn) -> next tick, tag the new
   untagged `obj_item` instances near `x, y` and send `id { gid, g, x, y,
@@ -624,14 +624,14 @@ DESIGN.md section 7. Needs: Phase 3.
   Receivers in that location spawn an `obj_item` with that `gid`; receivers
   elsewhere append to that grid's `lost_items` list so it appears on entry
   (`scripts/GameplaySystems/Items/Items.gml:687-698`).
-- [ ] **6.3 Pickup.** A tagged item that disappears locally (per-tick check
+- [x] **6.3 Pickup.** A tagged item that disappears locally (per-tick check
   of known gids in the room) sends `ip { gid }` to the host. The host keeps
   the set of live gids: first request wins and is broadcast as `ix { gid, by
   }`; a loser gets `ix` naming someone else and must give the item back
   (remove it from the inventory it just entered). Others despawn the item.
   Items the game spawns itself (tree drops, monster loot) stay local and
   untagged.
-- [ ] **6.4 Chest lock.** Storage chests and the shipping bin open
+- [x] **6.4 Chest lock.** Storage chests and the shipping bin open
   `Menu.Storage`. On `ui.menu_opened` with that kind, identify the node (from
   the menu's fields; record the field in the facts section) and send `cl {
   g, x, y, on:1 }` to the host; the host grants or denies (`cg`/`cd`). Until
@@ -640,7 +640,7 @@ DESIGN.md section 7. Needs: Phase 3.
   leaves. The chest's contents then travel by the existing object sync when
   the menu closes; force a signature check of that node on close so it is
   immediate.
-- [ ] **Done when:** scenarios pass.
+- [x] **Done when:** scenarios pass.
 
 ## Phase 7: Scenes and festivals
 

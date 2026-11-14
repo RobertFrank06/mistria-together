@@ -42,8 +42,24 @@ function mt_items_active() {
 function mt_items_all() {
     var _out = [];
     var _n = instance_number(obj_item);
-    for (var _i = 0; _i < _n; _i++) { array_push(_out, instance_find(obj_item, _i)); }
+    for (var _i = 0; _i < _n; _i++) {
+        try {
+            var _ref = instance_find(obj_item, _i);
+            var _probe = _ref.id;
+            array_push(_out, _ref);
+        } catch (_e) {}
+    }
     return _out;
+}
+
+// The live instance for a tagged drop (looked up fresh: stored references go stale).
+function mt_items_find(_gid) {
+    var _by = mt_items_state().by_inst;
+    var _all = mt_items_all();
+    for (var _i = 0; _i < array_length(_all); _i++) {
+        if (_by[$ string(_all[_i].id)] == _gid) { return _all[_i]; }
+    }
+    return undefined;
 }
 
 // --- dropped items ---------------------------------------------------------------------------
@@ -71,7 +87,7 @@ function mt_items_tag_new() {
     var _all = mt_items_all();
     for (var _a = 0; _a < array_length(_all); _a++) {
         var _cand = _all[_a];
-        if (_it.by_inst[$ string(_cand)] != undefined) { continue; }
+        if (_it.by_inst[$ string(_cand.id)] != undefined) { continue; }
         for (var _d = 0; _d < array_length(_drops); _d++) {
             if (point_distance(_cand.x, _cand.y, _drops[_d].x, _drops[_d].y) < 48) { array_push(_fresh, _cand); break; }
         }
@@ -80,9 +96,9 @@ function mt_items_tag_new() {
         var _inst = _fresh[_f];
         _it.counter += 1;
         var _gid = string(_rt.self_id) + "-" + string(_it.counter);
-        _it.by_inst[$ string(_inst)] = _gid;
+        _it.by_inst[$ string(_inst.id)] = _gid;
         _it.dbg_tagged += 1;
-        _it.tracked[$ _gid] = { inst: _inst, claim: "none" };
+        _it.tracked[$ _gid] = { claim: "none" };
         if (mt_is_host()) { _it.live[$ _gid] = true; }
         try {
             mt_send(MT_TO_ALL, {
@@ -110,19 +126,22 @@ function mt_items_on_id(_peer, _d) {
     _inst.final_x = _d.fx;
     _inst.final_y = _d.fy;
     _inst.setup(ListFromArray(_items));
-    _it.by_inst[$ string(_inst)] = _d.gid;
-    _it.tracked[$ _d.gid] = { inst: _inst, claim: "none" };
+    _it.by_inst[$ string(_inst.id)] = _d.gid;
+    _it.tracked[$ _d.gid] = { claim: "none" };
 }
 
 // The local player is collecting an item: hold it until the host agrees.
 function mt_items_scan_pickups() {
     var _it = mt_items_state();
-    var _names = struct_get_names(_it.tracked);
-    for (var _i = 0; _i < array_length(_names); _i++) {
-        var _gid = _names[_i];
+    var _all = mt_items_all();
+    var _seen = {};
+    for (var _i = 0; _i < array_length(_all); _i++) {
+        var _inst = _all[_i];
+        var _gid = _it.by_inst[$ string(_inst.id)];
+        if (_gid == undefined) { continue; }
         var _t = _it.tracked[$ _gid];
-        if (!instance_exists(_t.inst)) { struct_remove(_it.tracked, _gid); continue; }
-        var _inst = _t.inst;
+        if (_t == undefined) { continue; }
+        _seen[$ _gid] = true;
         try {
             if (_inst.kill_timer == -1 || _t.claim == "granted") { continue; }
             var _kt = _inst.kill_target;
@@ -134,6 +153,10 @@ function mt_items_scan_pickups() {
             else { mt_send(MT_TO_HOST, { t: "ic", gid: _gid }); }
         }
         if (_t.claim == "pending") { _inst.kill_timer = max(_inst.kill_timer, 3); }
+    }
+    var _names = struct_get_names(_it.tracked);
+    for (var _n = 0; _n < array_length(_names); _n++) {
+        if (_seen[$ _names[_n]] == undefined) { struct_remove(_it.tracked, _names[_n]); }
     }
 }
 
@@ -152,11 +175,15 @@ function mt_items_host_claim(_gid, _who) {
 
 function mt_items_answer(_gid, _granted) {
     var _t = mt_items_state().tracked[$ _gid];
-    if (_t == undefined || !instance_exists(_t.inst)) { return; }
+    if (_t == undefined) { return; }
     if (_granted) { _t.claim = "granted"; return; }
     // Somebody else got there first: the item just goes away.
-    _t.inst.picked_up = true;
-    instance_destroy(_t.inst);
+    mt_items_remove(_gid);
+}
+
+function mt_items_remove(_gid) {
+    var _inst = mt_items_find(_gid);
+    if (_inst != undefined) { _inst.picked_up = true; instance_destroy(_inst); }
     struct_remove(mt_items_state().tracked, _gid);
 }
 
@@ -262,9 +289,7 @@ function mt_items_on_message(_peer, _t, _d) {
             case "cd": mt_items_answer(_d.gid, false); break;
             case "ix":
                 if (_d.by != _rt.self_id) {
-                    var _tr = _it.tracked[$ _d.gid];
-                    if (_tr != undefined && instance_exists(_tr.inst)) { _tr.inst.picked_up = true; instance_destroy(_tr.inst); }
-                    struct_remove(_it.tracked, _d.gid);
+                    mt_items_remove(_d.gid);
                 }
                 break;
             case "kl":

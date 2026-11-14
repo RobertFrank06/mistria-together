@@ -224,7 +224,7 @@ function mt_dev_run(_cmd) {
             break;
         case "drop":
             // A player's drop: one turnip stack a little to the right.
-            drop_item([new LiveItem(ItemId.Turnip)], obj_ari.x + 24, obj_ari.y);
+            drop_item([new LiveItem(ItemId.Turnip)], obj_ari.x + 220, obj_ari.y);
             break;
         case "items_dbg":
             _val = mt_items_dev_state();
@@ -235,13 +235,15 @@ function mt_dev_run(_cmd) {
             var _alli = mt_items_all();
             for (var _ia = 0; _ia < array_length(_alli); _ia++) {
                 var _io = _alli[_ia];
-                array_push(_val.items, { gid: _gids[$ string(_io)] ?? "", x: _io.x, y: _io.y, item: item_id_to_string(_io.item_id) });
+                array_push(_val.items, { gid: _gids[$ string(_io.id)] ?? "", x: _io.x, y: _io.y, item: item_id_to_string(_io.item_id) });
             }
             break;
         case "pickup_nearest":
             // As if the player walked into the closest item.
             if (!instance_exists(obj_item)) { _val = { ok: false }; break; }
             var _near = instance_nearest(obj_ari.x, obj_ari.y, obj_item);
+            obj_ari.x = _near.x - 4;
+            obj_ari.y = _near.y;
             _near.kill_target = obj_ari.id;
             _near.kill_timer = 6;
             _val = { ok: true };
