@@ -28,9 +28,9 @@ jobs:
 
   gml-compile:
     # MOMI's own GML checker ships inside its CLI bundle, which extracts it on
-    # first run. Not yet seen to run on a CI runner, so it cannot fail the build.
+    # first run (verified with a clean HOME: it lands under ~/.net and
+    # tools/check-gml.sh finds it).
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
       - env:
