@@ -15,6 +15,8 @@ CHECK="${MOMI_GML_CHECK:-}"
 if [ -z "$CHECK" ]; then
     CHECK="$(find "$HOME/.net" -maxdepth 4 -name momi-gml-check -type f 2>/dev/null | head -n1 || true)"
 fi
+# A freshly extracted checker may not carry the executable bit.
+[ -n "$CHECK" ] && [ -f "$CHECK" ] && chmod +x "$CHECK" 2>/dev/null || true
 if [ -z "$CHECK" ] || [ ! -x "$CHECK" ]; then
     echo "momi-gml-check not found. Set MOMI_GML_CHECK, or run MOMI once so it extracts its tools." >&2
     exit 2
