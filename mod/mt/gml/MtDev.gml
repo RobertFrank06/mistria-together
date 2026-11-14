@@ -127,6 +127,33 @@ function mt_dev_run(_cmd) {
                 mpd: MINUTES_PER_DAY,
             };
             break;
+        case "bed":
+            // sleep: lie down in the first bed of this home (as the bed popup's
+            // Sleep button does); get_up: cancel.
+            if (_cmd.action == "get_up") { mt_night_get_up(); break; }
+            var _bed = undefined;
+            for (var _bi = 0; _bi < GRID.node_len && _bed == undefined; _bi++) {
+                if (GRID.node_object_id[_bi] == undefined) { continue; }
+                var _bp = GRID.node_parent[_bi];
+                if (_bp.prototype.bed_kind != undefined) { _bed = _bp; }
+            }
+            if (_bed == undefined) { throw "no bed in this room"; }
+            mt_night_go_bed(_bed);
+            break;
+        case "faint":
+            pass_out(true);
+            break;
+        case "summary_next":
+            // Tap the overnight summary's next-day button if it can be used.
+            var _eod = ANCHOR.get_menu(Menu.Eod);
+            if (_eod == undefined || _eod[$ "next_day_button"] == undefined) { _val = { tapped: false, why: "no button" }; break; }
+            if (!_eod.next_day_button.is_unlocked()) { _val = { tapped: false, why: "locked" }; break; }
+            ANCHOR.tap_node(_eod.next_day_button);
+            _val = { tapped: true };
+            break;
+        case "night_state":
+            _val = mt_night_dev_state();
+            break;
         case "host_pause":
             mt_world_set_pause(_cmd.on == true);
             break;
@@ -272,6 +299,7 @@ function mt_dev_tick() {
             _state.paused = game_paused();
             _state.sync = mt_sync_dev_state();
         }
+        _state.night = mt_night_dev_state();
         mt_ipc_write("dev_state.json", json_stringify(_state));
     }
 }

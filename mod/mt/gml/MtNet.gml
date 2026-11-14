@@ -72,6 +72,7 @@ function mt_net_reset(_reason) {
     _rt.state_sent_key = "";
     _rt.pose_sent = undefined;
     mt_world_reset();
+    mt_night_reset();
     if (_was_online) {
         mt_log("session ended: " + string(_reason));
         mt_ui_toast("Disconnected: " + string(_reason));
@@ -133,6 +134,7 @@ function mt_net_dispatch_system(_t, _d) {
             mt_ui_toast(mt_peer_name(_d.id) + " left");
             mt_log("player " + string(_d.id) + " left");
             mt_net_remove_peer(_d.id);
+            mt_night_on_leave(_d.id);
             break;
 
         case "bye":

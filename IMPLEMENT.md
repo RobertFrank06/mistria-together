@@ -16,7 +16,7 @@ to fail before the feature code is written.**
 | shipped | Remote players, snapshot + live farm sync, host time/weather, multiplayer menu, background companion, LAN discovery (v1.1.0) | done |
 | 0 | Test suite | in progress (0.1, 0.3 done; 0.2, 0.4, 0.5 partly) |
 | 1 | Session clock and host pause | done (spikes folded in; 1.7 asserted to 2:00 only) |
-| 2 | Group day end | not started |
+| 2 | Group day end | done except `night_guest_cannot_advance`, `night_host_faints`, `night_two_am`, `night_join_during`, the morning-wait popup (2.8) and unit test 2.2 |
 | 3 | Farmhand saves | not started |
 | 4 | Money and shipping | not started |
 | 5 | Shared progress and animals | not started |
@@ -339,7 +339,7 @@ When the host sees every online player ready it broadcasts the night. Bed
 players then run the game's real sleep scene; held players get their button
 back.
 
-- [ ] **2.1 Scenarios first** (`night_*`):
+- [~] **2.1 Scenarios first** (`night_*`):
   - `night_both_sleep`: both use the bed; the calendar advances once on both;
     digests equal in the morning; each player's stamina is restored.
   - `night_one_waits`: only the guest sleeps; 10 s later the day has not
@@ -362,7 +362,7 @@ back.
 - [ ] **2.2 Unit test first:** pure function
   `mt_night_all_ready(online_ids, ready_ids)` and the state transitions, in
   `mod/tests/night.gml`.
-- [ ] **2.3 Bed takeover:** register `mmapi_override("object.interact",
+- [~] **2.3 Bed takeover:** register `mmapi_override("object.interact",
   mt_night_on_interact)`; add `"object.interact"` to `requires_hooks`. Claim
   only when online with at least one other player and
   `ctx.prototype.bed_kind != undefined` and the game's own conditions hold
@@ -372,22 +372,22 @@ back.
   record the bed exactly as the game does (`ARI.last_bed_used = {
   location_id, ni }`, `Interact.gml:708`), enter the waiting state, send
   `nr`.
-- [ ] **2.4 Waiting state:** the player lies in bed (play the sleep loop
+- [~] **2.4 Waiting state:** the player lies in bed (play the sleep loop
   animation on `obj_ari.par`; block movement by keeping a mod popup open with
   one button, "Get up", and the list of players with ready/not-ready). "Get
   up" clears the state and sends `nr` with `r:0`. The waiting popup refreshes
   when the ready set changes.
-- [ ] **2.5 Held state:** on `player.pass_out` and `player.died` (add both to
+- [~] **2.5 Held state:** on `player.pass_out` and `player.died` (add both to
   `requires_hooks`) set a flag; on `ui.menu_opened` with `kind == Menu.Eod`
   while online with others: lock the continue button (field from the spike),
   show "Waiting for the other players", send `nr` with `held:1`. Any
   `Menu.Eod` opening without a prior bed start is treated the same way, which
   covers day-ending scenes.
-- [ ] **2.6 Host ready set:** host stores `ready[id] = { held }`, removes an
+- [~] **2.6 Host ready set:** host stores `ready[id] = { held }`, removes an
   id on `leave`, and broadcasts `ns { ready:[ids], n }` on every change. When
   all online ids (including the host) are ready, the host sets `st_night`,
   broadcasts `ng { day }`, and starts its own night.
-- [ ] **2.7 Running the night on each machine:** on `ng`: bed players close
+- [~] **2.7 Running the night on each machine:** on `ng`: bed players close
   the waiting popup and call `MIST.request_scene("sleep")` (the game then
   runs `end_day` -> summary -> `new_day` -> save, `EodMenu.gml:938-972`); held
   players get the button unlocked. Players who are neither (should not happen)
@@ -784,6 +784,19 @@ Checked against game v1.0.8 scripts. Paths are under `assets/gml/`.
 ### Spike results
 
 _(Filled in by Phase 0.5.)_
+
+Found while building Phase 2:
+- `object.interact` override: the handler gets the node; returning `true`
+  claims it (vanilla popup does not appear), `undefined` declines.
+- The overnight summary's button is `ANCHOR.get_menu(Menu.Eod).next_day_button`
+  (`is_unlocked()`, `lock()`, `unlock()`). It is created about 240 frames
+  after the menu opens, so it must be locked from the tick, not from
+  `ui.menu_opened`. Tapping it from a test: `ANCHOR.tap_node(button)`.
+- During the summary the player object does not exist (`mt_in_world()` is
+  false). Per-frame night logic therefore runs outside the in-world tick, and
+  the companion's "ready" flag means "a save is loaded", not "in world"
+  (otherwise the session drops at every day end; fixed in `MtIpc.gml`).
+- Houses are per-player locations; compare world digests on the farm.
 
 Found while building Phase 1 (no separate spike needed):
 - Wrapping works: `CLOCK.jump = method(CLOCK, fn)` with the original kept in

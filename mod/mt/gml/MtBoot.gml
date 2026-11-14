@@ -51,6 +51,7 @@ function __mt_rt() {
 
             // --- local player (MtPlayers.gml) ---
             in_world: false,
+            ever_in_world: false,    // a save has been entered (survives the overnight summary)
             look_key: "",
             look_sent_key: "",
             pose_sent: undefined,
@@ -151,6 +152,7 @@ function mt_tick() {
     var _in_world = mt_in_world();
     if (_in_world != _rt.in_world) {
         _rt.in_world = _in_world;
+        if (_in_world) { _rt.ever_in_world = true; }
         _rt.game_dirty = true;
     }
 
@@ -161,6 +163,7 @@ function mt_tick() {
             mt_players_tick();
             mt_world_tick();
         }
+        mt_night_tick();
         mt_net_tick();
     }
 
@@ -173,6 +176,7 @@ function mt_on_title_entered(_ctx) {
     var _rt = __mt_rt();
     if (_rt.ready) {
         _rt.in_world = false;
+        _rt.ever_in_world = false;
         _rt.ready = false;
         mt_net_reset("left the game");
         mt_ipc_write_game(true);
@@ -190,6 +194,7 @@ function mt_register() {
     mmapi_on("game.title_entered", mt_on_title_entered);
     mmapi_on("ui.draw_gui", mt_ui_draw_gui);
     mmapi_on("game.new_day", mt_world_on_new_day);
+    mmapi_override("object.interact", mt_night_on_interact);
     mmapi_filter("clock.time_advance", mt_world_filter_time_advance);
     mmapi_guard("game.save_guard", mt_world_save_guard);
 }

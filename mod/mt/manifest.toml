@@ -10,5 +10,6 @@ requires_hooks = [
     "game.new_day",
     "game.save_guard",
     "game.title_entered",
+    "object.interact",
     "ui.draw_gui",
 ]

@@ -66,7 +66,9 @@ function mt_ipc_write_game(_force) {
         ver: MT_VERSION,
         sid: _rt.sid,
         hb: _rt.frame,
-        ready: _rt.in_world,
+        // A save is loaded. Not the same as in_world: during the overnight
+        // summary the player object does not exist, but the session must stay.
+        ready: _rt.ready && (_rt.in_world || _rt.ever_in_world),
         name: _name,
         farm: _farm,
     }));

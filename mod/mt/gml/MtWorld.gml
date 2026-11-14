@@ -118,7 +118,7 @@ function mt_clock_jump_real(_time) {
 // Keep the local clock near session time unless this game is paused.
 function mt_world_follow() {
     var _w = mt_world_state();
-    if (!mt_world_clock_driven() || game_paused()) { return; }
+    if (!mt_world_clock_driven() || game_paused() || _w.st_night) { return; }
     var _target = min(MT_DAY_END, floor(_w.st));
     var _diff = _target - CLOCK.time;
     if (_diff <= 0) { return; }
@@ -194,6 +194,10 @@ function mt_world_on_message(_peer, _t, _d) {
         mt_world_on_time(_peer, _d);
         return;
     }
+    if (_t == "nr" || _t == "ns" || _t == "ng") {
+        mt_night_on_message(_peer, _t, _d);
+        return;
+    }
     mt_sync_on_message(_peer, _t, _d);
 }
 
@@ -209,6 +213,7 @@ function mt_world_filter_time_advance(_value, _ctx) {
 }
 
 function mt_world_on_new_day(_ctx) {
+    mt_night_on_new_day(_ctx);
     var _w = mt_world_state();
     if (mt_is_host()) { _w.st = hours(6); _w.st_night = false; _w.time_sent_frame = -100000; }
     mt_sync_on_new_day(_ctx);
