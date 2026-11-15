@@ -47,8 +47,45 @@ function mt_menu_set(_mode, _addr = "") {
     mt_log("multiplayer menu: " + _mode + (_addr != "" ? " " + _addr : ""));
 }
 
+// Every menu of this mod sits with its top edge at the same height, high
+// enough that its last button is not at the very bottom of the screen. The
+// popup's height is only known once its buttons exist, so this runs on its
+// first frame.
+function mt_menu_place(_popup) {
+    if (_popup[$ "mt_placed"] == true) { return; }
+    _popup.mt_placed = true;
+    var _h = _popup.backplate.get_height();
+    _popup.backplate.set_y(floor(_h / 2) - 113);
+}
+
+// List-style menu: placed as above, and Escape (or a controller's back button) closes it.
+function mt_menu_list(_title) {
+    var _menu = new MultipleChoicePopup(_title);
+    _menu.popup.title.set_think_callback(mt_menu_list_think, [_menu.popup]);
+    return _menu;
+}
+
+function mt_menu_list_think(_popup) {
+    mt_menu_place(_popup);
+    if (!_popup.canvas.is_unlocked() || ANCHOR.get_menu(Menu.Popup) != _popup) { return; }
+    if (!INPUT.take_press(InputId.MenuBack)) { return; }
+    _popup.lock();
+    new_chain()
+        .append(LinkId.Ease, new Ease(EaseId.QuartOut, 1, 0, 12), function(_, a, popup) {
+            popup.canvas.set_alpha(a);
+        }, [_popup])
+        .append(LinkId.Function, function(popup) { popup.close(); }, [_popup]);
+}
+
+// A text popup with buttons (first button = Escape): placed like the lists.
+function mt_menu_text_popup(_title, _text) {
+    var _popup = popup_creator(_title, _text);
+    _popup.title.set_think_callback(mt_menu_place, [_popup]);
+    return _popup;
+}
+
 function mt_menu_notice(_title, _text) {
-    var _popup = popup_creator(mt_menu_text(_title), mt_menu_text(_text));
+    var _popup = mt_menu_text_popup(mt_menu_text(_title), mt_menu_text(_text));
     _popup.create_button(mt_menu_text("OK"));
     _popup.spawn();
 }
@@ -62,19 +99,19 @@ function mt_menu_friends(_page = 0) {
     var _friends = _cfg.friends;
     var _count = array_length(_friends);
     if (_count == 0) {
-        var _empty = popup_creator(mt_menu_text("Saved Friends"), mt_menu_text("No saved friends yet. Add a friend's name and hostname or address to join them later."));
+        var _empty = mt_menu_text_popup(mt_menu_text("Saved Friends"), mt_menu_text("No saved friends yet. Add a friend's name and hostname or address to join them later."));
         _empty.create_button(mt_menu_text("Back"), mt_menu_join_menu);
         _empty.create_button(mt_menu_text("Add Friend"), mt_menu_add_friend);
         _empty.spawn();
         return;
     }
 
-    var _per_page = 5;
+    var _per_page = 3;
     var _pages = ceil(_count / _per_page);
     _page = clamp(_page, 0, _pages - 1);
     var _start = _page * _per_page;
     var _end = min(_start + _per_page, _count);
-    var _menu = new MultipleChoicePopup(mt_menu_text("Saved Friends"));
+    var _menu = mt_menu_list(mt_menu_text("Saved Friends"));
     for (var _i = _start; _i < _end; _i++) {
         var _f = _friends[_i];
         var _label = string(_f.name);
@@ -126,10 +163,10 @@ function mt_menu_friend_selected(_index) {
     var _friends = mt_config().friends;
     if (_index < 0 || _index >= array_length(_friends)) { return; }
     var _f = _friends[_index];
-    var _menu = new MultipleChoicePopup(mt_menu_text(_f.name));
+    var _menu = mt_menu_list(mt_menu_text(_f.name));
     _menu.option(mt_menu_text("Join"), mt_menu_friend_join, [_index]);
     _menu.option(mt_menu_text("Remove"), mt_menu_friend_remove, [_index]);
-    _menu.option(mt_menu_text("Back"), mt_menu_friends, [floor(_index / 5)]);
+    _menu.option(mt_menu_text("Back"), mt_menu_friends, [floor(_index / 3)]);
 }
 
 function mt_menu_friend_join(_index) {
@@ -150,7 +187,7 @@ function mt_menu_friend_remove(_index) {
 
 function mt_menu_settings(_unused = 0) {
     var _cfg = mt_config();
-    var _menu = new MultipleChoicePopup(mt_menu_text("Multiplayer Settings"));
+    var _menu = mt_menu_list(mt_menu_text("Multiplayer Settings"));
     _menu.option(mt_menu_text("HUD " + (_cfg.show_hud ? "On" : "Off")), mt_menu_toggle_hud);
     _menu.option(mt_menu_text("Names " + (_cfg.name_tags ? "On" : "Off")), mt_menu_toggle_names);
     _menu.option(mt_menu_text("Smooth " + string(_cfg.smoothing_frames)), mt_menu_smoothing);
@@ -215,30 +252,38 @@ function mt_menu_open() {
             ? "Joining " + string(_link[$ "addr"]) + "..." + (_link[$ "state"] == "error" ? " (" + _detail + ")" : "")
             : "You join " + string(_link[$ "addr"]) + " as soon as you load a save.";
     }
-    var _status = popup_creator(mt_menu_text("Multiplayer"), mt_menu_text(_text));
-    if (mt_is_host() && _rt.online) {
-        var _paused = mt_world_state().st_paused;
-        _status.create_button(mt_menu_text(_paused ? "Resume game" : "Pause game"), mt_menu_toggle_pause);
-    }
-    if (mt_is_host() && _rt.online) {
-        var _wm = mt_money_state();
-        var _target = (_wm.pending != "" ? _wm.pending : _wm.mode) == "shared" ? "separate" : "shared";
-        _status.create_button(mt_menu_text("Wallet: " + _target), mt_menu_request_wallet, [_target]);
-    }
-    _status.create_button(mt_menu_text("Settings"), mt_menu_settings);
-    _status.create_button(mt_menu_text("Disconnect"), mt_menu_on_disconnect);
+    var _status = mt_menu_text_popup(mt_menu_text("Multiplayer"), mt_menu_text(_text));
+    _status.create_button(mt_menu_text("Close"));
+    _status.create_button(mt_menu_text("Options"), mt_menu_options);
     _status.spawn();
 }
 
+// What the status popup's Options button opens.
+function mt_menu_options(_unused = 0) {
+    var _rt = __mt_rt();
+    var _menu = mt_menu_list(mt_menu_text("Multiplayer"));
+    if (mt_is_host() && _rt.online) {
+        var _paused = mt_world_state().st_paused;
+        _menu.option(mt_menu_text(_paused ? "Resume game" : "Pause game"), mt_menu_toggle_pause);
+        var _wm = mt_money_state();
+        var _target = (_wm.pending != "" ? _wm.pending : _wm.mode) == "shared" ? "separate" : "shared";
+        _menu.option(mt_menu_text("Wallet: " + _target), mt_menu_request_wallet, [_target]);
+    }
+    _menu.option(mt_menu_text("Settings"), mt_menu_settings);
+    _menu.option(mt_menu_text("Disconnect"), mt_menu_on_disconnect);
+    _menu.option(mt_menu_text("Back"), mt_menu_open);
+}
+
+
 function mt_menu_main(_unused = 0) {
-    var _menu = new MultipleChoicePopup(mt_menu_text("Multiplayer"));
+    var _menu = mt_menu_list(mt_menu_text("Multiplayer"));
     _menu.option(mt_menu_text("Join"), mt_menu_join_menu);
     _menu.option(mt_menu_text("Host"), mt_menu_on_host);
     _menu.option(mt_menu_text("Settings"), mt_menu_settings);
 }
 
 function mt_menu_join_menu(_unused = 0) {
-    var _menu = new MultipleChoicePopup(mt_menu_text("Join Multiplayer"));
+    var _menu = mt_menu_list(mt_menu_text("Join Multiplayer"));
     _menu.option(mt_menu_text("Nearby Games"), mt_menu_nearby);
     _menu.option(mt_menu_text("Saved Friends"), mt_menu_friends);
     _menu.option(mt_menu_text("Add Friend"), mt_menu_add_friend);
@@ -276,19 +321,19 @@ function mt_menu_nearby(_page = 0) {
     var _lan = (_link != undefined && is_array(_link[$ "lan"])) ? _link.lan : [];
     var _count = array_length(_lan);
     if (_count == 0) {
-        var _empty = popup_creator(mt_menu_text("Nearby Games"), mt_menu_text("No nearby games found. Try again or choose a saved friend or direct address."));
+        var _empty = mt_menu_text_popup(mt_menu_text("Nearby Games"), mt_menu_text("No nearby games found. Try again or choose a saved friend or direct address."));
         _empty.create_button(mt_menu_text("Back"), mt_menu_join_menu);
         _empty.create_button(mt_menu_text("Refresh"), mt_menu_nearby, [0]);
         _empty.spawn();
         return;
     }
 
-    var _per_page = 5;
+    var _per_page = 3;
     var _pages = ceil(_count / _per_page);
     _page = clamp(_page, 0, _pages - 1);
     var _start = _page * _per_page;
     var _end = min(_start + _per_page, _count);
-    var _menu = new MultipleChoicePopup(mt_menu_text("Nearby Games"));
+    var _menu = mt_menu_list(mt_menu_text("Nearby Games"));
     for (var _i = _start; _i < _end; _i++) {
         var _game = _lan[_i];
         var _players = _game[$ "players"];

@@ -44,6 +44,14 @@ function mt_ui_draw_name_tag(_name, _x, _y) {
     mt_ui_text_end();
 }
 
+// The HUD sits in the top-left corner next to the energy bar and must never run
+// across the screen: clip long text.
+function mt_ui_fit(_text, _max = 24) {
+    _text = string(_text);
+    if (string_length(_text) <= _max) { return _text; }
+    return string_copy(_text, 1, _max - 3) + "...";
+}
+
 function mt_ui_status_line() {
     var _rt = __mt_rt();
     var _key = mt_config().menu_key;
@@ -52,7 +60,7 @@ function mt_ui_status_line() {
     }
     switch (_rt.link_state) {
         case "connecting": return "Connecting...";
-        case "error":      return _rt.link_detail;
+        case "error":      return string_pos("cannot host", string(_rt.link_detail)) == 1 ? "Cannot host (F9)" : mt_ui_fit(_rt.link_detail);
         case "hosting":    return "Starting to host...";
         default:           return "Multiplayer: " + _key;
     }
@@ -86,7 +94,7 @@ function mt_ui_draw_gui(_scale) {
         var _x = 6;
         var _y = 24;
         for (var _m = 0; _m < array_length(_lines); _m++) {
-            draw_text_with_color(_x, _y + _m * 10, _lines[_m], 1.0, 1.0, c_white, 1.0);
+            draw_text_with_color(_x, _y + _m * 10, mt_ui_fit(_lines[_m]), 1.0, 1.0, c_white, 1.0);
         }
         mt_ui_text_end();
         draw_camera_override_camera(0, 0, _out[0], _out[1]);

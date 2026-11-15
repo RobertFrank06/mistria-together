@@ -274,6 +274,17 @@ function mt_dev_run(_cmd) {
             if (_cmd[$ "set"] != undefined) { _lp.skin_tone = _cmd.set; }
             _val = { tone: _lp.skin_tone };
             break;
+        case "ui_show":
+            // Put one of the mod's screens up, for looking at it.
+            switch (_cmd.kind) {
+                case "status": mt_menu_open(); break;
+                case "options": mt_menu_options(); break;
+                case "bed": mt_night_state().bed = true; mt_night_show_popup(); break;
+                case "morning": mt_night_wait_morning(); break;
+                case "notice": mt_menu_notice("Multiplayer", "A sample notice that is long enough to wrap onto a second line."); break;
+                case "toast": mt_ui_toast("Mia joined"); break;
+            }
+            break;
         case "title_button":
             // The Multiplayer button on the title screen: its state, and (tap) a click on it.
             var _tb = __mt_rt().title_button;

@@ -1,6 +1,6 @@
 name = "Mistria Together"
 author = "RobertFrank06"
-version = "1.2.1"
+version = "1.2.2"
 minInstallerVersion = "0.17.0"
 manifestVersion = 1
 download_url = "https://github.com/RobertFrank06/mistria-together"

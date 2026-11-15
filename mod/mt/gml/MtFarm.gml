@@ -174,7 +174,7 @@ function mt_farm_on_info(_j, _info) {
     }
     if (_path != undefined) {
         if (_j.auto) { mt_farm_enter_continue(_j.addr, _info, _path); return; }
-        var _popup = popup_creator(mt_menu_text(string(_info.farm_name)), mt_menu_text(string(_info.host_name) + "'s farm. Continue as your farmhand?"));
+        var _popup = mt_menu_text_popup(mt_menu_text(string(_info.farm_name)), mt_menu_text(string(_info.host_name) + "'s farm. Continue as your farmhand?"));
         _popup.create_button(mt_menu_text("Cancel"));
         _popup.create_button(mt_menu_text("Continue"), mt_farm_enter_continue, [_j.addr, _info, _path]);
         _popup.spawn();
